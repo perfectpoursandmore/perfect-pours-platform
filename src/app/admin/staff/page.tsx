@@ -1,14 +1,14 @@
 import { createClient } from "@/lib/supabase/server";
 import { addStaffMember, toggleStaffActive } from "./actions";
 
-const ALL_ROLES = ["bartender", "server", "captain", "barback", "setup"];
+const ALL_ROLES = ["bartender", "server", "barback"];
 
 export default async function StaffDirectoryPage() {
   const supabase = createClient();
 
   const { data: staff } = await supabase
     .from("staff")
-    .select("id, first_name, last_name, roles, active, staff_details(phone, email, pay_rate)")
+    .select("id, first_name, last_name, roles, active")
     .order("first_name");
 
   return (
@@ -45,7 +45,7 @@ export default async function StaffDirectoryPage() {
           </div>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "1rem" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
           <div>
             <label htmlFor="phone">Phone</label>
             <input id="phone" name="phone" />
@@ -53,10 +53,6 @@ export default async function StaffDirectoryPage() {
           <div>
             <label htmlFor="email">Email</label>
             <input id="email" name="email" type="email" />
-          </div>
-          <div>
-            <label htmlFor="payRate">Pay rate ($/hr)</label>
-            <input id="payRate" name="payRate" type="number" step="0.01" min={0} />
           </div>
         </div>
 
@@ -72,23 +68,18 @@ export default async function StaffDirectoryPage() {
               <tr style={{ textAlign: "left", borderBottom: "1px solid var(--color-border)" }}>
                 <th style={{ padding: "0.75rem 1rem" }}>Name</th>
                 <th style={{ padding: "0.75rem 1rem" }}>Roles</th>
-                <th style={{ padding: "0.75rem 1rem" }}>Pay rate</th>
                 <th style={{ padding: "0.75rem 1rem" }}>Status</th>
                 <th style={{ padding: "0.75rem 1rem" }} />
               </tr>
             </thead>
             <tbody>
               {staff.map((s) => {
-                const details = Array.isArray(s.staff_details) ? s.staff_details[0] : s.staff_details;
                 return (
                   <tr key={s.id} style={{ borderBottom: "1px solid var(--color-border)" }}>
                     <td style={{ padding: "0.75rem 1rem" }}>
                       {s.first_name} {s.last_name}
                     </td>
                     <td style={{ padding: "0.75rem 1rem" }}>{s.roles?.join(", ") || "—"}</td>
-                    <td style={{ padding: "0.75rem 1rem" }}>
-                      {details?.pay_rate ? `$${details.pay_rate}/hr` : "—"}
-                    </td>
                     <td style={{ padding: "0.75rem 1rem" }}>{s.active ? "Active" : "Inactive"}</td>
                     <td style={{ padding: "0.75rem 1rem" }}>
                       <form action={toggleStaffActive}>

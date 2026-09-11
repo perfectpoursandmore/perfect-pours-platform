@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/roles";
 
-const ALL_ROLES = ["bartender", "server", "captain", "barback", "setup"];
+const ALL_ROLES = ["bartender", "server", "barback"];
 
 async function requireAdmin() {
   const user = await getCurrentUser();
@@ -19,7 +19,6 @@ export async function addStaffMember(formData: FormData) {
   const roles = ALL_ROLES.filter((r) => formData.get(`role-${r}`) === "on");
   const phone = String(formData.get("phone") ?? "").trim();
   const email = String(formData.get("email") ?? "").trim();
-  const payRateRaw = formData.get("payRate");
 
   const { data: staff, error } = await supabase
     .from("staff")
@@ -31,12 +30,14 @@ export async function addStaffMember(formData: FormData) {
     .select("id")
     .single();
 
+  // pay_rate is intentionally not set here — Faith sets an hourly rate per
+  // event instead, on that event's staff/payout screen, rather than a
+  // default per staff member.
   if (!error && staff) {
     await supabase.from("staff_details").insert({
       staff_id: staff.id,
       phone: phone || null,
       email: email || null,
-      pay_rate: payRateRaw ? Number(payRateRaw) : null,
     });
   }
 
