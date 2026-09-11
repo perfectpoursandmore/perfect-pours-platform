@@ -44,14 +44,14 @@ export async function sendEmail(params: {
   return res.json();
 }
 
-type SupabaseLike = {
-  from: (table: string) => {
-    select: (columns: string) => {
-      eq: (col: string, val: unknown) => { single: () => Promise<{ data: unknown }> };
-    };
-    insert: (values: Record<string, unknown>) => Promise<{ error: unknown }>;
-  };
-};
+// Deliberately `any`, not a structural shape: the real Supabase client's
+// generics are deep enough that TypeScript's structural check against a
+// hand-written interface here blows past its recursion limit ("Type
+// instantiation is excessively deep and possibly infinite") once the real
+// @supabase/supabase-js types are installed. Every value pulled off this
+// client is already cast to an explicit local type before use below, so
+// nothing here relies on the compiler checking the client's shape.
+type SupabaseLike = any;
 
 /**
  * Renders an email_templates row's {{variable}} placeholders, sends it, and

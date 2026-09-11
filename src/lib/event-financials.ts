@@ -3,18 +3,14 @@
 // since the person signing hasn't logged in). Both need to update the same
 // booking-status cache without clobbering fields the other one owns.
 
-type SupabaseLike = {
-  from: (table: string) => {
-    upsert: (
-      values: Record<string, unknown>,
-      opts: { onConflict: string }
-    ) => Promise<{ error: unknown }>;
-    select: (columns: string) => {
-      eq: (col: string, val: unknown) => { single: () => Promise<{ data: unknown }> };
-    };
-    update: (values: Record<string, unknown>) => { eq: (col: string, val: unknown) => Promise<unknown> };
-  };
-};
+// Deliberately `any`, not a structural shape: the real Supabase client's
+// generics are deep enough that TypeScript's structural check against a
+// hand-written interface here blows past its recursion limit ("Type
+// instantiation is excessively deep and possibly infinite") once the real
+// @supabase/supabase-js types are installed. Every value pulled off this
+// client is already cast to an explicit local type before use below, so
+// nothing here relies on the compiler checking the client's shape.
+type SupabaseLike = any;
 
 export async function upsertEventFinancials(
   supabase: SupabaseLike,
