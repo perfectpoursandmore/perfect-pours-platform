@@ -40,6 +40,12 @@ export default async function ClientDetailPage({
     .eq("client_id", params.id)
     .order("created_at", { ascending: false });
 
+  const { data: otherClients } = await supabase
+    .from("clients")
+    .select("id, first_name, last_name, email")
+    .neq("id", params.id)
+    .order("first_name");
+
   return (
     <div style={{ display: "grid", gap: "1.5rem", maxWidth: 640 }}>
       <div>
@@ -214,6 +220,42 @@ export default async function ClientDetailPage({
           <p style={{ color: "var(--color-muted)", margin: 0 }}>No emails sent to this client yet.</p>
         )}
       </div>
+
+      {otherClients && otherClients.length > 0 && (
+        <div className="card">
+          <h2 style={{ marginTop: 0, fontSize: "1rem" }}>Merge this client</h2>
+          <p style={{ color: "var(--color-muted)", marginTop: 0 }}>
+            Is this a duplicate of someone already in your list? Combine them into one record —
+            all of this client&apos;s events, notes, and email history move over, and this record
+            gets deleted. You&apos;ll see a confirmation before anything happens.
+          </p>
+          <form method="get" action={`/admin/clients/${client.id}/merge`} style={{ display: "flex", gap: "0.75rem", alignItems: "end" }}>
+            <div style={{ flex: 1 }}>
+              <label htmlFor="into">Merge into</label>
+              <select
+                id="into"
+                name="into"
+                required
+                defaultValue=""
+                style={{ width: "100%", padding: "0.55rem 0.7rem", borderRadius: 8, border: "1px solid var(--color-border)" }}
+              >
+                <option value="" disabled>
+                  — choose the other client —
+                </option>
+                {otherClients.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.first_name} {c.last_name}
+                    {c.email ? ` (${c.email})` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button type="submit" className="button">
+              Review merge
+            </button>
+          </form>
+        </div>
+      )}
     </div>
   );
 }

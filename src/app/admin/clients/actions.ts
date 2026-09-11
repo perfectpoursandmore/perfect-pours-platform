@@ -83,3 +83,65 @@ export async function sendClientEmail(formData: FormData) {
 
   revalidatePath(`/admin/clients/${clientId}`);
 }
+
+/**
+ * Merges one client record into another: every event, note, lead, and email
+ * sent to the "merge away" client is moved onto the "keep" client, any
+ * contact info the keeper is missing gets filled in from the one being
+ * removed, and then the duplicate record is deleted. Irreversible — the
+ * confirmation screen in merge/page.tsx is what should call this, never a
+ * bare link.
+ */
+export async function confirmMergeClients(formData: FormData) {
+  await requireAdmin();
+  const supabase = createClient();
+  const keepId = String(formData.get("keepId"));
+  const mergeId = String(formData.get("mergeId"));
+
+  if (!keepId || !mergeId || keepId === mergeId) {
+    redirect(`/admin/clients/${mergeId}?error=Choose a different client to merge into.`);
+  }
+
+  const [{ data: keep }, { data: remove }] = await Promise.all([
+    supabase.from("clients").select("*").eq("id", keepId).single(),
+    supabase.from("clients").select("*").eq("id", mergeId).single(),
+  ]);
+
+  if (!keep || !remove) {
+    redirect(`/admin/clients/${mergeId}?error=Couldn't find one of those clients.`);
+  }
+
+  // Move everything that pointed at the duplicate over to the keeper.
+  await Promise.all([
+    supabase.from("events").update({ client_id: keepId }).eq("client_id", mergeId),
+    supabase.from("client_notes").update({ client_id: keepId }).eq("client_id", mergeId),
+    supabase.from("leads").update({ client_id: keepId }).eq("client_id", mergeId),
+    supabase.from("email_log").update({ client_id: keepId }).eq("client_id", mergeId),
+  ]);
+
+  // Fill in anything the keeper is missing, from the record being removed —
+  // never overwrites a value the keeper already has.
+  const patch: Record<string, unknown> = {};
+  if (!keep!.email && remove!.email) patch.email = remove!.email;
+  if (!keep!.phone && remove!.phone) patch.phone = remove!.phone;
+  if (!keep!.preferred_contact_method && remove!.preferred_contact_method)
+    patch.preferred_contact_method = remove!.preferred_contact_method;
+  if (!keep!.qbo_customer_id && remove!.qbo_customer_id) patch.qbo_customer_id = remove!.qbo_customer_id;
+  if (!keep!.user_id && remove!.user_id) patch.user_id = remove!.user_id;
+
+  if (Object.keys(patch).length > 0) {
+    await supabase.from("clients").update(patch).eq("id", keepId);
+  }
+
+  await supabase.from("client_notes").insert({
+    client_id: keepId,
+    note: `Merged duplicate client record "${remove!.first_name} ${remove!.last_name}"${
+      remove!.email ? ` (${remove!.email})` : ""
+    } into this one.`,
+  });
+
+  await supabase.from("clients").delete().eq("id", mergeId);
+
+  revalidatePath("/admin/clients");
+  redirect(`/admin/clients/${keepId}`);
+}
