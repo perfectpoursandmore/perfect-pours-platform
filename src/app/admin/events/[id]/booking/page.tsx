@@ -260,7 +260,7 @@ export default async function EventBookingPage({
 
             <form
               action={updateProposalAdjustments}
-              style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr auto", gap: "0.75rem", alignItems: "end" }}
+              style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr auto", gap: "0.75rem", alignItems: "end" }}
             >
               <input type="hidden" name="proposalId" value={proposal.id} />
               <input type="hidden" name="eventId" value={eventId} />
@@ -271,6 +271,10 @@ export default async function EventBookingPage({
               <div>
                 <label htmlFor="feeAmount">Fee ($)</label>
                 <input id="feeAmount" name="feeAmount" type="number" step="0.01" defaultValue={proposal.fee_amount} />
+              </div>
+              <div>
+                <label htmlFor="gratuityRate">Gratuity (%)</label>
+                <input id="gratuityRate" name="gratuityRate" type="number" step="0.001" defaultValue={proposal.gratuity_rate} />
               </div>
               <div>
                 <label htmlFor="taxRate">Tax rate (%)</label>
@@ -289,6 +293,7 @@ export default async function EventBookingPage({
               <Row label="Subtotal" value={formatMoney(proposal.subtotal)} />
               <Row label="Discount" value={`- ${formatMoney(proposal.discount_amount)}`} />
               <Row label="Fee" value={formatMoney(proposal.fee_amount)} />
+              <Row label={`Gratuity (${proposal.gratuity_rate}%)`} value={formatMoney(proposal.gratuity_amount)} />
               <Row label="Tax" value={formatMoney(proposal.tax_amount)} />
               <Row label="Total" value={formatMoney(proposal.total_amount)} strong />
               <Row label="Deposit due" value={formatMoney(proposal.deposit_amount)} />

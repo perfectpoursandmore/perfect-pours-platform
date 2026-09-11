@@ -89,6 +89,7 @@ export async function updateProposalAdjustments(formData: FormData) {
     .update({
       discount_amount: Number(formData.get("discountAmount") ?? 0),
       fee_amount: Number(formData.get("feeAmount") ?? 0),
+      gratuity_rate: Number(formData.get("gratuityRate") ?? 0),
       tax_rate: Number(formData.get("taxRate") ?? 0),
       deposit_amount: Number(formData.get("depositAmount") ?? 0),
     })
@@ -104,7 +105,7 @@ async function recomputeAndSaveProposalTotals(
 ) {
   const { data: proposal } = await supabase
     .from("proposals")
-    .select("discount_amount, fee_amount, tax_rate")
+    .select("discount_amount, fee_amount, gratuity_rate, tax_rate")
     .eq("id", proposalId)
     .single();
 
@@ -117,6 +118,7 @@ async function recomputeAndSaveProposalTotals(
     lineTotals: (items ?? []).map((i) => Number(i.line_total)),
     discountAmount: Number(proposal?.discount_amount ?? 0),
     feeAmount: Number(proposal?.fee_amount ?? 0),
+    gratuityRatePercent: Number(proposal?.gratuity_rate ?? 0),
     taxRatePercent: Number(proposal?.tax_rate ?? 0),
   });
 
@@ -124,6 +126,7 @@ async function recomputeAndSaveProposalTotals(
     .from("proposals")
     .update({
       subtotal: totals.subtotal,
+      gratuity_amount: totals.gratuityAmount,
       tax_amount: totals.taxAmount,
       total_amount: totals.totalAmount,
     })
