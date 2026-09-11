@@ -238,7 +238,17 @@ function MonthGrid({
                   <EventChip key={event.id} event={event} />
                 ))}
                 {dayEvents.length > 3 && (
-                  <div style={{ fontSize: "0.72rem", color: "var(--color-muted)" }}>+{dayEvents.length - 3} more</div>
+                  <a
+                    href={`/admin/calendar?view=week&date=${dateStr}`}
+                    style={{
+                      display: "block",
+                      fontSize: "0.72rem",
+                      color: "var(--color-accent)",
+                      textDecoration: "none",
+                    }}
+                  >
+                    +{dayEvents.length - 3} more
+                  </a>
                 )}
               </div>
             );
