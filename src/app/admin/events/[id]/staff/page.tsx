@@ -2,6 +2,8 @@ import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/labels";
 import { assignStaffToEvent, removeEventStaffAssignment, upsertEventStaffPayout } from "../../actions";
 
+const ROLE_OPTIONS = ["bartender", "server", "barback"];
+
 type PayoutRow = {
   event_staff_id: string;
   hours: number | null;
@@ -63,7 +65,22 @@ export default async function EventStaffPage({ params }: { params: { id: string 
           </div>
           <div>
             <label htmlFor="role">Role</label>
-            <input id="role" name="role" placeholder="e.g. Bartender" required />
+            <select
+              id="role"
+              name="role"
+              defaultValue=""
+              required
+              style={{ width: "100%", padding: "0.55rem 0.7rem", borderRadius: 8, border: "1px solid var(--color-border)" }}
+            >
+              <option value="" disabled>
+                — choose a role —
+              </option>
+              {ROLE_OPTIONS.map((role) => (
+                <option key={role} value={role}>
+                  {role[0].toUpperCase() + role.slice(1)}
+                </option>
+              ))}
+            </select>
           </div>
           <button type="submit" className="button">
             Add

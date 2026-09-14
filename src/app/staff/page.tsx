@@ -20,15 +20,12 @@ type StaffEvent = {
   address_line: string | null;
   city: string | null;
   state: string | null;
-  indoor_outdoor: string | null;
   guest_count: number | null;
   staff_arrival_time: string | null;
   guest_arrival_time: string | null;
   staff_end_time: string | null;
   staff_instructions: string | null;
-  dress_code: string | null;
-  parking_instructions: string | null;
-  venue_instructions: string | null;
+  serveware_type: string | null;
 };
 
 export default async function StaffCalendarPage() {
@@ -51,7 +48,7 @@ export default async function StaffCalendarPage() {
   const { data: events } = await supabase
     .from("events")
     .select(
-      "id, name, event_type, event_date, venue_name, address_line, city, state, indoor_outdoor, guest_count, staff_arrival_time, guest_arrival_time, staff_end_time, staff_instructions, dress_code, parking_instructions, venue_instructions"
+      "id, name, event_type, event_date, venue_name, address_line, city, state, guest_count, staff_arrival_time, guest_arrival_time, staff_end_time, staff_instructions, serveware_type"
     )
     .eq("status", "booked")
     .gte("event_date", todayLocal)
@@ -110,18 +107,22 @@ export default async function StaffCalendarPage() {
 
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "0.75rem", fontSize: "0.9rem" }}>
                 <Field label="Location" value={location || "TBD"} />
-                <Field label="Indoor/Outdoor" value={event.indoor_outdoor ?? "—"} />
                 <Field label="Guest count" value={event.guest_count ? String(event.guest_count) : "—"} />
                 <Field label="Staff arrival" value={formatDateTime(event.staff_arrival_time)} />
                 <Field label="Guest arrival" value={formatDateTime(event.guest_arrival_time)} />
                 <Field label="Staff end time" value={formatDateTime(event.staff_end_time)} />
-                <Field label="Dress code" value={event.dress_code ?? "—"} />
-                <Field label="Parking" value={event.parking_instructions ?? "—"} />
+                <Field
+                  label="Glassware/Disposable"
+                  value={
+                    event.serveware_type === "glassware"
+                      ? "Glassware"
+                      : event.serveware_type === "disposable"
+                      ? "Disposable"
+                      : "—"
+                  }
+                />
               </div>
 
-              {event.venue_instructions && (
-                <Field label="Venue instructions" value={event.venue_instructions} />
-              )}
               {event.staff_instructions && (
                 <Field label="Notes for staff" value={event.staff_instructions} />
               )}

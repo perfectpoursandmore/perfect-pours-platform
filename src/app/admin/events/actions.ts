@@ -36,16 +36,68 @@ export async function updateEventOverview(formData: FormData) {
       state: nullIfEmpty(formData.get("state")),
       zip: nullIfEmpty(formData.get("zip")),
       guest_count: guestCount,
-      indoor_outdoor: nullIfEmpty(formData.get("indoorOutdoor")),
-      dress_code: nullIfEmpty(formData.get("dressCode")),
-      parking_instructions: nullIfEmpty(formData.get("parkingInstructions")),
-      venue_instructions: nullIfEmpty(formData.get("venueInstructions")),
+      serveware_type: nullIfEmpty(formData.get("servewareType")),
       staff_instructions: nullIfEmpty(formData.get("staffInstructions")),
     })
     .eq("id", id);
 
   revalidatePath(`/admin/events/${id}`);
   revalidatePath("/admin/events");
+}
+
+/** Points this event at a different, already-existing client. */
+export async function reassignEventClient(formData: FormData) {
+  await requireAdmin();
+  const supabase = createClient();
+  const eventId = String(formData.get("eventId"));
+  const clientId = String(formData.get("clientId") ?? "");
+
+  if (!clientId) return;
+
+  await supabase.from("events").update({ client_id: clientId }).eq("id", eventId);
+
+  revalidatePath(`/admin/events/${eventId}`);
+  revalidatePath("/admin/events");
+  revalidatePath("/admin/clients");
+}
+
+/**
+ * For when an event is attached to the wrong person entirely — e.g. two
+ * different real clients both got entered under the same first name and
+ * ended up sharing one record. Creates a brand-new client and moves just
+ * this one event onto it, leaving every other event on the old client alone.
+ */
+export async function createClientAndAssignToEvent(formData: FormData) {
+  await requireAdmin();
+  const supabase = createClient();
+  const eventId = String(formData.get("eventId"));
+  const firstName = String(formData.get("firstName") ?? "").trim();
+  const lastName = String(formData.get("lastName") ?? "").trim();
+
+  if (!firstName) {
+    redirect(`/admin/events/${eventId}?error=First name is required.`);
+  }
+
+  const { data: newClient, error } = await supabase
+    .from("clients")
+    .insert({
+      first_name: firstName,
+      last_name: lastName,
+      email: nullIfEmpty(formData.get("email")),
+      phone: nullIfEmpty(formData.get("phone")),
+    })
+    .select("id")
+    .single();
+
+  if (error || !newClient) {
+    redirect(`/admin/events/${eventId}?error=Couldn't create that client.`);
+  }
+
+  await supabase.from("events").update({ client_id: newClient!.id }).eq("id", eventId);
+
+  revalidatePath(`/admin/events/${eventId}`);
+  revalidatePath("/admin/events");
+  revalidatePath("/admin/clients");
 }
 
 export async function addEventNote(formData: FormData) {

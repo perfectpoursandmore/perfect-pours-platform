@@ -1,16 +1,98 @@
 import { createClient } from "@/lib/supabase/server";
-import { EVENT_TYPE_LABELS, EVENT_STATUS_LABELS } from "@/lib/labels";
-import { updateEventOverview } from "../actions";
+import { EVENT_STATUS_LABELS } from "@/lib/labels";
+import { updateEventOverview, reassignEventClient, createClientAndAssignToEvent } from "../actions";
 
-export default async function EventOverviewPage({ params }: { params: { id: string } }) {
+export default async function EventOverviewPage({
+  params,
+  searchParams,
+}: {
+  params: { id: string };
+  searchParams: { error?: string };
+}) {
   const supabase = createClient();
   const { data: event } = await supabase.from("events").select("*").eq("id", params.id).single();
 
   if (!event) return null;
 
+  const { data: allClients } = await supabase
+    .from("clients")
+    .select("id, first_name, last_name, email")
+    .order("first_name");
+
   return (
-    <form action={updateEventOverview} className="card" style={{ display: "grid", gap: "1rem" }}>
-      <input type="hidden" name="id" value={event.id} />
+    <>
+      {searchParams.error && <p style={{ color: "#a33" }}>{searchParams.error}</p>}
+
+      <div className="card" style={{ display: "grid", gap: "1rem" }}>
+        <h2 style={{ marginTop: 0, fontSize: "1rem" }}>Client for this event</h2>
+        <p style={{ margin: 0, color: "var(--color-muted)" }}>
+          Wrong person attached to this event? Pick the right one, or if they&apos;re not in your
+          list at all yet, add them below — only this event moves, nothing else on the current
+          client changes.
+        </p>
+
+        <form
+          action={reassignEventClient}
+          style={{ display: "flex", gap: "0.75rem", alignItems: "end" }}
+        >
+          <input type="hidden" name="eventId" value={event.id} />
+          <div style={{ flex: 1 }}>
+            <label htmlFor="clientId">Client</label>
+            <select
+              id="clientId"
+              name="clientId"
+              defaultValue={event.client_id}
+              style={{ width: "100%", padding: "0.55rem 0.7rem", borderRadius: 8, border: "1px solid var(--color-border)" }}
+            >
+              {(allClients ?? []).map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.first_name} {c.last_name}
+                  {c.email ? ` (${c.email})` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button type="submit" className="button">
+            Save
+          </button>
+        </form>
+
+        <details>
+          <summary style={{ cursor: "pointer" }}>This client isn&apos;t in the list — add a new one</summary>
+          <form
+            action={createClientAndAssignToEvent}
+            style={{ display: "grid", gap: "0.75rem", marginTop: "0.75rem" }}
+          >
+            <input type="hidden" name="eventId" value={event.id} />
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+              <div>
+                <label htmlFor="newFirstName">First name</label>
+                <input id="newFirstName" name="firstName" required />
+              </div>
+              <div>
+                <label htmlFor="newLastName">Last name</label>
+                <input id="newLastName" name="lastName" />
+              </div>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+              <div>
+                <label htmlFor="newEmail">Email (optional)</label>
+                <input id="newEmail" name="email" type="email" />
+              </div>
+              <div>
+                <label htmlFor="newPhone">Phone (optional)</label>
+                <input id="newPhone" name="phone" />
+              </div>
+            </div>
+            <button type="submit" className="button" style={{ justifySelf: "start" }}>
+              Create client &amp; move this event to them
+            </button>
+          </form>
+        </details>
+      </div>
+
+      <form action={updateEventOverview} className="card" style={{ display: "grid", gap: "1rem" }}>
+        <input type="hidden" name="id" value={event.id} />
 
       <div>
         <label htmlFor="name">Event name</label>
@@ -20,18 +102,7 @@ export default async function EventOverviewPage({ params }: { params: { id: stri
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
         <div>
           <label htmlFor="eventType">Event type</label>
-          <select
-            id="eventType"
-            name="eventType"
-            defaultValue={event.event_type}
-            style={{ width: "100%", padding: "0.55rem 0.7rem", borderRadius: 8, border: "1px solid var(--color-border)" }}
-          >
-            {Object.entries(EVENT_TYPE_LABELS).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
+          <input id="eventType" name="eventType" defaultValue={event.event_type} required />
         </div>
         <div>
           <label htmlFor="status">Status</label>
@@ -86,21 +157,6 @@ export default async function EventOverviewPage({ params }: { params: { id: stri
         </div>
       </div>
 
-      <div>
-        <label htmlFor="indoorOutdoor">Indoor / outdoor</label>
-        <select
-          id="indoorOutdoor"
-          name="indoorOutdoor"
-          defaultValue={event.indoor_outdoor ?? ""}
-          style={{ width: "100%", padding: "0.55rem 0.7rem", borderRadius: 8, border: "1px solid var(--color-border)" }}
-        >
-          <option value="">Not set</option>
-          <option value="indoor">Indoor</option>
-          <option value="outdoor">Outdoor</option>
-          <option value="both">Both</option>
-        </select>
-      </div>
-
       <hr style={{ border: "none", borderTop: "1px solid var(--color-border)" }} />
       <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--color-muted)" }}>
         The fields below are what staff see on their calendar — never client contact info or
@@ -108,16 +164,17 @@ export default async function EventOverviewPage({ params }: { params: { id: stri
       </p>
 
       <div>
-        <label htmlFor="dressCode">Dress code</label>
-        <input id="dressCode" name="dressCode" defaultValue={event.dress_code ?? ""} />
-      </div>
-      <div>
-        <label htmlFor="parkingInstructions">Parking instructions</label>
-        <input id="parkingInstructions" name="parkingInstructions" defaultValue={event.parking_instructions ?? ""} />
-      </div>
-      <div>
-        <label htmlFor="venueInstructions">Venue instructions</label>
-        <input id="venueInstructions" name="venueInstructions" defaultValue={event.venue_instructions ?? ""} />
+        <label htmlFor="servewareType">Glassware or disposable</label>
+        <select
+          id="servewareType"
+          name="servewareType"
+          defaultValue={event.serveware_type ?? ""}
+          style={{ width: "100%", padding: "0.55rem 0.7rem", borderRadius: 8, border: "1px solid var(--color-border)" }}
+        >
+          <option value="">Not set</option>
+          <option value="glassware">Glassware</option>
+          <option value="disposable">Disposable</option>
+        </select>
       </div>
       <div>
         <label htmlFor="staffInstructions">Operational notes for staff</label>
@@ -141,5 +198,6 @@ export default async function EventOverviewPage({ params }: { params: { id: stri
         Save
       </button>
     </form>
+    </>
   );
 }
