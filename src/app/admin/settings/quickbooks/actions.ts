@@ -19,6 +19,8 @@ export async function disconnectQuickBooks() {
       realm_id: null,
       connected_by: null,
       connected_at: null,
+      needs_reconnect: false,
+      reconnect_reason: null,
     })
     .eq("id", true);
 

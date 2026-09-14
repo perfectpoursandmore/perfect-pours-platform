@@ -49,6 +49,8 @@ export async function GET(request: Request) {
         environment: process.env.QUICKBOOKS_ENVIRONMENT === "production" ? "production" : "sandbox",
         connected_by: user.id,
         connected_at: new Date().toISOString(),
+        needs_reconnect: false,
+        reconnect_reason: null,
       })
       .eq("id", true);
 

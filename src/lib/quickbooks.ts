@@ -22,6 +22,17 @@ function basicAuthHeader(): string {
   return `Basic ${Buffer.from(`${id}:${secret}`).toString("base64")}`;
 }
 
+/**
+ * Every QuickBooks response (success or failure) carries an `intuit_tid`
+ * header — a tracking number Intuit's own support team asks for when
+ * troubleshooting a request. We fold it into our error messages so it's
+ * right there in the message Faith already sees, instead of being lost.
+ */
+function intuitTidSuffix(res: Response): string {
+  const tid = res.headers.get("intuit_tid");
+  return tid ? ` [intuit_tid: ${tid}]` : "";
+}
+
 /** The URL that starts Faith's one-time "connect your QuickBooks company" flow. */
 export function getQboAuthUrl(state: string): string {
   const params = new URLSearchParams({
@@ -56,10 +67,27 @@ export async function exchangeCodeForTokens(code: string): Promise<TokenResponse
   });
 
   if (!res.ok) {
-    throw new Error(`QuickBooks token exchange failed: ${res.status} ${await res.text()}`);
+    throw new Error(
+      `QuickBooks token exchange failed: ${res.status} ${await res.text()}${intuitTidSuffix(res)}`
+    );
   }
 
   return res.json();
+}
+
+/**
+ * Marks (or clears) the "needs reconnect" flag Faith sees as a banner
+ * whenever QuickBooks stops accepting the stored connection — an expired or
+ * revoked refresh token, an invalid_grant error, or QuickBooks rejecting a
+ * request outright. Cleared automatically the moment a request succeeds
+ * again, and whenever she reconnects via Settings.
+ */
+async function setNeedsReconnect(needsReconnect: boolean, reason: string | null): Promise<void> {
+  const supabase = createAdminClient();
+  await supabase
+    .from("qbo_connections")
+    .update({ needs_reconnect: needsReconnect, reconnect_reason: reason })
+    .eq("id", true);
 }
 
 async function refreshAccessToken(refreshToken: string): Promise<TokenResponse> {
@@ -77,7 +105,9 @@ async function refreshAccessToken(refreshToken: string): Promise<TokenResponse> 
   });
 
   if (!res.ok) {
-    throw new Error(`QuickBooks token refresh failed: ${res.status} ${await res.text()}`);
+    throw new Error(
+      `QuickBooks token refresh failed: ${res.status} ${await res.text()}${intuitTidSuffix(res)}`
+    );
   }
 
   return res.json();
@@ -117,7 +147,24 @@ export async function getValidConnection(): Promise<QboConnection | null> {
     return { accessToken: connection.access_token, realmId: connection.realm_id, environment };
   }
 
-  const refreshed = await refreshAccessToken(connection.refresh_token);
+  let refreshed: TokenResponse;
+  try {
+    refreshed = await refreshAccessToken(connection.refresh_token);
+  } catch (err) {
+    // The refresh token itself is expired, revoked, or QuickBooks returned
+    // invalid_grant — the stored connection is dead until Faith reconnects.
+    // Surface that as a banner rather than letting every invoicing action
+    // crash with a raw error.
+    await setNeedsReconnect(
+      true,
+      "QuickBooks disconnected this app (this can happen if the connection " +
+        "sat unused for a long time, or was disconnected from QuickBooks' " +
+        "side). Reconnect below to keep sending invoices."
+    );
+    console.error("QuickBooks token refresh failed:", err);
+    return null;
+  }
+
   const newExpiresAt = new Date(Date.now() + refreshed.expires_in * 1000).toISOString();
 
   await supabase
@@ -126,6 +173,8 @@ export async function getValidConnection(): Promise<QboConnection | null> {
       access_token: refreshed.access_token,
       refresh_token: refreshed.refresh_token, // Intuit rotates the refresh token on every use
       access_token_expires_at: newExpiresAt,
+      needs_reconnect: false,
+      reconnect_reason: null,
     })
     .eq("id", true);
 
@@ -154,7 +203,17 @@ async function qboFetch(
   });
 
   if (!res.ok) {
-    throw new Error(`QuickBooks API error (${path}): ${res.status} ${await res.text()}`);
+    const body = await res.text();
+    if (res.status === 401) {
+      // A freshly-refreshed access token was still rejected — QuickBooks has
+      // revoked this connection outright (e.g. Faith disconnected the app
+      // from the QuickBooks side, or an admin removed access).
+      await setNeedsReconnect(
+        true,
+        "QuickBooks rejected this app's connection. Reconnect below to keep sending invoices."
+      );
+    }
+    throw new Error(`QuickBooks API error (${path}): ${res.status} ${body}${intuitTidSuffix(res)}`);
   }
 
   return res.json();

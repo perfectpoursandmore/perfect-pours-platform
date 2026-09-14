@@ -9,11 +9,12 @@ export default async function QuickBooksSettingsPage({
   const supabase = createClient();
   const { data: connection } = await supabase
     .from("qbo_connections")
-    .select("connected_at, realm_id, environment")
+    .select("connected_at, realm_id, environment, needs_reconnect, reconnect_reason")
     .eq("id", true)
     .single();
 
   const isConnected = Boolean(connection?.connected_at && connection?.realm_id);
+  const needsReconnect = Boolean(connection?.needs_reconnect);
 
   return (
     <div style={{ display: "grid", gap: "1.5rem", maxWidth: 620 }}>
@@ -31,6 +32,24 @@ export default async function QuickBooksSettingsPage({
         <p style={{ color: "#2a7a2a" }}>QuickBooks connected successfully.</p>
       )}
       {searchParams.error && <p style={{ color: "#a33" }}>{searchParams.error}</p>}
+
+      {needsReconnect && (
+        <div
+          className="card"
+          style={{ background: "#fdf1f1", border: "1px solid #e3b6b6" }}
+        >
+          <p style={{ margin: "0 0 0.75rem", fontWeight: 600, color: "#a33" }}>
+            ⚠ QuickBooks needs to be reconnected
+          </p>
+          <p style={{ margin: "0 0 1rem" }}>
+            {connection?.reconnect_reason ??
+              "QuickBooks stopped accepting this app's connection. Reconnect below to keep sending invoices."}
+          </p>
+          <a href="/api/quickbooks/connect" className="button">
+            Reconnect QuickBooks
+          </a>
+        </div>
+      )}
 
       <div className="card">
         {isConnected ? (

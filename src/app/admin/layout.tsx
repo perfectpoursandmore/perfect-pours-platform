@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/roles";
+import { createClient } from "@/lib/supabase/server";
 import { RoleShell } from "@/components/RoleShell";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -11,6 +12,17 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   if (!user || user.role !== "admin") {
     redirect("/login");
   }
+
+  // Surfaced everywhere in the admin area (not just the QuickBooks settings
+  // page) so a broken connection doesn't go unnoticed for days — it means
+  // invoices have quietly stopped going out.
+  const supabase = createClient();
+  const { data: qbo } = await supabase
+    .from("qbo_connections")
+    .select("needs_reconnect")
+    .eq("id", true)
+    .single();
+  const qboNeedsReconnect = Boolean(qbo?.needs_reconnect);
 
   return (
     <RoleShell
@@ -30,6 +42,24 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         { label: "Settings", href: "/admin/settings" },
       ]}
     >
+      {qboNeedsReconnect && (
+        <a
+          href="/admin/settings/quickbooks"
+          style={{
+            display: "block",
+            marginBottom: "1.5rem",
+            padding: "0.75rem 1rem",
+            borderRadius: 8,
+            background: "#fdf1f1",
+            border: "1px solid #e3b6b6",
+            color: "#a33",
+            fontSize: "0.9rem",
+            textDecoration: "none",
+          }}
+        >
+          ⚠ QuickBooks needs to be reconnected — invoices can&apos;t send until you do. Click here to reconnect.
+        </a>
+      )}
       {children}
     </RoleShell>
   );
