@@ -167,6 +167,7 @@ export async function generateContract(formData: FormData) {
 
   const vars = {
     client_name: client ? `${client.first_name} ${client.last_name}` : "",
+    today_date: formatDate(new Date().toISOString().slice(0, 10)),
     event_date: formatDate(event!.event_date),
     event_location: [event!.venue_name, event!.address_line, event!.city, event!.state]
       .filter(Boolean)
