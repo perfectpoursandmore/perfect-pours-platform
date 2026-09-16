@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/roles";
 import { EVENT_TYPE_LABELS, formatDate, formatDateTime } from "@/lib/labels";
@@ -43,6 +44,14 @@ export default async function StaffCalendarPage() {
     : { data: null };
   const myStaffId = myStaffRow?.id ?? null;
 
+  const { count: pendingCount } = myStaffId
+    ? await supabase
+        .from("event_staff_invites")
+        .select("id", { count: "exact", head: true })
+        .eq("staff_id", myStaffId)
+        .eq("status", "pending")
+    : { count: 0 };
+
   const todayLocal = new Date().toISOString().slice(0, 10);
 
   const { data: events } = await supabase
@@ -72,6 +81,25 @@ export default async function StaffCalendarPage() {
 
   return (
     <div style={{ display: "grid", gap: "1.5rem" }}>
+      {!!pendingCount && (
+        <Link
+          href="/staff/availability"
+          style={{
+            display: "block",
+            padding: "0.85rem 1.1rem",
+            borderRadius: 10,
+            background: "var(--color-accent)",
+            color: "#fff",
+            textDecoration: "none",
+            fontWeight: 600,
+          }}
+        >
+          {pendingCount === 1
+            ? "You have 1 availability request waiting — click here to answer it"
+            : `You have ${pendingCount} availability requests waiting — click here to answer them`}
+        </Link>
+      )}
+
       <div>
         <h1 style={{ margin: 0 }}>Upcoming events</h1>
         <p style={{ color: "var(--color-muted)", maxWidth: 620 }}>

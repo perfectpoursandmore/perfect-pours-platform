@@ -1,8 +1,26 @@
 import { createClient } from "@/lib/supabase/server";
-import { formatMoney } from "@/lib/labels";
-import { assignStaffToEvent, removeEventStaffAssignment, upsertEventStaffPayout } from "../../actions";
+import { formatDateTime, formatMoney } from "@/lib/labels";
+import {
+  assignStaffToEvent,
+  removeEventStaffAssignment,
+  upsertEventStaffPayout,
+  requestStaffAvailability,
+  withdrawAvailabilityRequest,
+} from "../../actions";
 
 const ROLE_OPTIONS = ["bartender", "server", "barback"];
+
+const STATUS_LABEL: Record<string, string> = {
+  pending: "Waiting to hear back",
+  available: "Said yes",
+  unavailable: "Said no",
+};
+
+const STATUS_COLOR: Record<string, string> = {
+  pending: "var(--color-muted)",
+  available: "#2a7a2a",
+  unavailable: "#a33",
+};
 
 type PayoutRow = {
   event_staff_id: string;
@@ -38,8 +56,77 @@ export default async function EventStaffPage({ params }: { params: { id: string 
     .eq("active", true)
     .order("first_name");
 
+  const { data: invites } = await supabase
+    .from("event_staff_invites")
+    .select("id, status, responded_at, staff_id, staff:staff_id(first_name, last_name)")
+    .eq("event_id", params.id)
+    .order("created_at");
+
   return (
     <div style={{ display: "grid", gap: "1.5rem" }}>
+      <div className="card">
+        <h2 style={{ marginTop: 0, fontSize: "1rem" }}>Ask who&apos;s available</h2>
+        <p style={{ color: "var(--color-muted)", fontSize: "0.9rem", marginTop: "-0.5rem" }}>
+          Sends an email asking if they&apos;re free for this event — this doesn&apos;t assign
+          them to anything yet. Once people answer, assign whoever you pick down below.
+        </p>
+        <form action={requestStaffAvailability} style={{ display: "grid", gap: "0.75rem" }}>
+          <input type="hidden" name="eventId" value={params.id} />
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
+            {(activeStaff ?? []).map((s) => (
+              <label key={s.id} style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.9rem" }}>
+                <input type="checkbox" name="staffIds" value={s.id} />
+                {s.first_name} {s.last_name}
+              </label>
+            ))}
+          </div>
+          <button type="submit" className="button" style={{ justifySelf: "start" }}>
+            Send availability request
+          </button>
+        </form>
+
+        {invites && invites.length > 0 && (
+          <div style={{ marginTop: "1rem", display: "grid", gap: "0.5rem" }}>
+            {invites.map((invite) => {
+              const person = Array.isArray(invite.staff) ? invite.staff[0] : invite.staff;
+              return (
+                <div
+                  key={invite.id}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    fontSize: "0.9rem",
+                    borderTop: "1px solid var(--color-border)",
+                    paddingTop: "0.5rem",
+                  }}
+                >
+                  <span>
+                    {person ? `${person.first_name} ${person.last_name}` : "—"} —{" "}
+                    <span style={{ color: STATUS_COLOR[invite.status] ?? "var(--color-muted)" }}>
+                      {STATUS_LABEL[invite.status] ?? invite.status}
+                    </span>
+                    {invite.responded_at && (
+                      <span style={{ color: "var(--color-muted)" }}> ({formatDateTime(invite.responded_at)})</span>
+                    )}
+                  </span>
+                  <form action={withdrawAvailabilityRequest}>
+                    <input type="hidden" name="id" value={invite.id} />
+                    <input type="hidden" name="eventId" value={params.id} />
+                    <button
+                      type="submit"
+                      style={{ background: "none", border: "none", color: "var(--color-accent)", cursor: "pointer" }}
+                    >
+                      Remove
+                    </button>
+                  </form>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
       <div className="card">
         <h2 style={{ marginTop: 0, fontSize: "1rem" }}>Assign staff</h2>
         <form

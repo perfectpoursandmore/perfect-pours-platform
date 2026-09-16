@@ -4,6 +4,8 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/roles";
+import { isEmailConfigured, sendTemplatedEmail } from "@/lib/email";
+import { formatDate } from "@/lib/labels";
 
 async function requireAdmin() {
   const user = await getCurrentUser();
@@ -209,6 +211,101 @@ export async function assignStaffToEvent(formData: FormData) {
     role,
     is_open: isOpen,
   });
+
+  revalidatePath(`/admin/events/${eventId}/staff`);
+}
+
+/**
+ * Asks one or more staff whether they're free for this event — an email
+ * with a Yes/No link, NOT an assignment. This is deliberately separate from
+ * assignStaffToEvent below: Faith often asks several people about the same
+ * day (two events at once, or deciding by who lives closest to the venue)
+ * and wants to see who says yes before she picks. Re-asking someone resets
+ * their answer back to pending, in case plans changed.
+ */
+export async function requestStaffAvailability(formData: FormData) {
+  await requireAdmin();
+  const supabase = createClient();
+  const eventId = String(formData.get("eventId"));
+  const staffIds = formData.getAll("staffIds").map(String).filter(Boolean);
+
+  if (staffIds.length === 0) {
+    revalidatePath(`/admin/events/${eventId}/staff`);
+    return;
+  }
+
+  const { data: event } = await supabase
+    .from("events")
+    .select("name, event_date, venue_name, address_line, city, state")
+    .eq("id", eventId)
+    .single();
+
+  const { data: staffRows } = await supabase
+    .from("staff")
+    .select("id, first_name, staff_details(email)")
+    .in("id", staffIds);
+
+  const location = event
+    ? [event.venue_name, event.address_line, event.city, event.state].filter(Boolean).join(", ")
+    : "";
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
+
+  let templateId: string | null = null;
+  if (isEmailConfigured()) {
+    const { data: template } = await supabase
+      .from("email_templates")
+      .select("id")
+      .eq("active", true)
+      .ilike("name", "%availability%")
+      .limit(1)
+      .single();
+    templateId = template?.id ?? null;
+  }
+
+  for (const staffId of staffIds) {
+    await supabase.from("event_staff_invites").upsert(
+      { event_id: eventId, staff_id: staffId, status: "pending", responded_at: null },
+      { onConflict: "event_id,staff_id" }
+    );
+
+    if (!templateId) continue;
+
+    const staffRow = (staffRows ?? []).find((s) => s.id === staffId) as
+      | { id: string; first_name: string; staff_details: { email: string | null } | { email: string | null }[] | null }
+      | undefined;
+    const details = staffRow
+      ? Array.isArray(staffRow.staff_details)
+        ? staffRow.staff_details[0]
+        : staffRow.staff_details
+      : null;
+    const email = details?.email;
+    if (!email) continue;
+
+    await sendTemplatedEmail(supabase, {
+      templateId,
+      to: email,
+      eventId,
+      vars: {
+        staff_first_name: staffRow?.first_name ?? "there",
+        event_name: event?.name ?? "an event",
+        event_date: event?.event_date ? formatDate(event.event_date) : "",
+        event_location: location || "TBD",
+        availability_link: `${appUrl}/staff/availability`,
+      },
+    });
+  }
+
+  revalidatePath(`/admin/events/${eventId}/staff`);
+}
+
+/** Cancels an availability ask — e.g. she meant to ask someone else. */
+export async function withdrawAvailabilityRequest(formData: FormData) {
+  await requireAdmin();
+  const supabase = createClient();
+  const id = String(formData.get("id"));
+  const eventId = String(formData.get("eventId"));
+
+  await supabase.from("event_staff_invites").delete().eq("id", id);
 
   revalidatePath(`/admin/events/${eventId}/staff`);
 }

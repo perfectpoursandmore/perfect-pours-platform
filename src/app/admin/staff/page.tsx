@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { addStaffMember, toggleStaffActive, inviteStaffLogin } from "./actions";
 
@@ -111,16 +112,21 @@ export default async function StaffDirectoryPage({
                       )}
                     </td>
                     <td style={{ padding: "0.75rem 1rem" }}>
-                      <form action={toggleStaffActive}>
-                        <input type="hidden" name="id" value={s.id} />
-                        <input type="hidden" name="active" value={String(s.active)} />
-                        <button
-                          type="submit"
-                          style={{ background: "none", border: "none", color: "var(--color-accent)", cursor: "pointer" }}
-                        >
-                          {s.active ? "Deactivate" : "Reactivate"}
-                        </button>
-                      </form>
+                      <div style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
+                        <Link href={`/admin/staff/${s.id}/edit`} style={{ color: "var(--color-accent)" }}>
+                          Edit
+                        </Link>
+                        <form action={toggleStaffActive}>
+                          <input type="hidden" name="id" value={s.id} />
+                          <input type="hidden" name="active" value={String(s.active)} />
+                          <button
+                            type="submit"
+                            style={{ background: "none", border: "none", color: "var(--color-accent)", cursor: "pointer", padding: 0 }}
+                          >
+                            {s.active ? "Deactivate" : "Reactivate"}
+                          </button>
+                        </form>
+                      </div>
                     </td>
                   </tr>
                 );

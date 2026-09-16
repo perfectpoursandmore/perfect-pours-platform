@@ -86,6 +86,47 @@ export async function inviteStaffLogin(formData: FormData) {
   revalidatePath("/admin/staff");
 }
 
+/**
+ * Edits an existing staff member's name, roles, phone, and email — e.g. she
+ * just cross-trained someone to bartend, or they got a new email address.
+ * If they already have a login, their sign-in email is kept in sync with
+ * whatever's saved here too, so "update their email" doesn't quietly leave
+ * their actual login address pointing somewhere stale.
+ */
+export async function updateStaffMember(formData: FormData) {
+  await requireAdmin();
+  const supabase = createClient();
+  const staffId = String(formData.get("staffId"));
+
+  const firstName = String(formData.get("firstName") ?? "").trim();
+  const lastName = String(formData.get("lastName") ?? "").trim();
+  const roles = ALL_ROLES.filter((r) => formData.get(`role-${r}`) === "on");
+  const phone = String(formData.get("phone") ?? "").trim();
+  const email = String(formData.get("email") ?? "").trim();
+
+  if (!firstName) {
+    redirect(`/admin/staff/${staffId}/edit?error=${encodeURIComponent("First name is required.")}`);
+  }
+
+  await supabase
+    .from("staff")
+    .update({ first_name: firstName, last_name: lastName, roles })
+    .eq("id", staffId);
+
+  await supabase
+    .from("staff_details")
+    .upsert({ staff_id: staffId, phone: phone || null, email: email || null }, { onConflict: "staff_id" });
+
+  const { data: staffRow } = await supabase.from("staff").select("user_id").eq("id", staffId).single();
+  if (staffRow?.user_id && email) {
+    const admin = createAdminClient();
+    await admin.auth.admin.updateUserById(staffRow.user_id, { email });
+  }
+
+  revalidatePath("/admin/staff");
+  redirect("/admin/staff");
+}
+
 export async function toggleStaffActive(formData: FormData) {
   await requireAdmin();
   const supabase = createClient();
