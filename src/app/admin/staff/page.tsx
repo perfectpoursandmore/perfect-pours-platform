@@ -1,14 +1,18 @@
 import { createClient } from "@/lib/supabase/server";
-import { addStaffMember, toggleStaffActive } from "./actions";
+import { addStaffMember, toggleStaffActive, inviteStaffLogin } from "./actions";
 
 const ALL_ROLES = ["bartender", "server", "barback"];
 
-export default async function StaffDirectoryPage() {
+export default async function StaffDirectoryPage({
+  searchParams,
+}: {
+  searchParams: { error?: string };
+}) {
   const supabase = createClient();
 
   const { data: staff } = await supabase
     .from("staff")
-    .select("id, first_name, last_name, roles, active")
+    .select("id, first_name, last_name, roles, active, user_id, staff_details(email)")
     .order("first_name");
 
   return (
@@ -20,6 +24,8 @@ export default async function StaffDirectoryPage() {
           rate — staff logins never see this directory's contact or pay info.
         </p>
       </div>
+
+      {searchParams.error && <p style={{ color: "#a33" }}>{searchParams.error}</p>}
 
       <form action={addStaffMember} className="card" style={{ display: "grid", gap: "1rem" }}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
@@ -69,11 +75,14 @@ export default async function StaffDirectoryPage() {
                 <th style={{ padding: "0.75rem 1rem" }}>Name</th>
                 <th style={{ padding: "0.75rem 1rem" }}>Roles</th>
                 <th style={{ padding: "0.75rem 1rem" }}>Status</th>
+                <th style={{ padding: "0.75rem 1rem" }}>Login</th>
                 <th style={{ padding: "0.75rem 1rem" }} />
               </tr>
             </thead>
             <tbody>
               {staff.map((s) => {
+                const details = Array.isArray(s.staff_details) ? s.staff_details[0] : s.staff_details;
+                const email = details?.email ?? null;
                 return (
                   <tr key={s.id} style={{ borderBottom: "1px solid var(--color-border)" }}>
                     <td style={{ padding: "0.75rem 1rem" }}>
@@ -81,6 +90,26 @@ export default async function StaffDirectoryPage() {
                     </td>
                     <td style={{ padding: "0.75rem 1rem" }}>{s.roles?.join(", ") || "—"}</td>
                     <td style={{ padding: "0.75rem 1rem" }}>{s.active ? "Active" : "Inactive"}</td>
+                    <td style={{ padding: "0.75rem 1rem" }}>
+                      {s.user_id ? (
+                        <span style={{ color: "#2a7a2a" }}>✓ Can log in</span>
+                      ) : email ? (
+                        <form action={inviteStaffLogin}>
+                          <input type="hidden" name="staffId" value={s.id} />
+                          <input type="hidden" name="firstName" value={s.first_name} />
+                          <input type="hidden" name="lastName" value={s.last_name} />
+                          <input type="hidden" name="email" value={email} />
+                          <button
+                            type="submit"
+                            style={{ background: "none", border: "none", color: "var(--color-accent)", cursor: "pointer", padding: 0 }}
+                          >
+                            Invite to log in
+                          </button>
+                        </form>
+                      ) : (
+                        <span style={{ color: "var(--color-muted)", fontSize: "0.85rem" }}>Add an email first</span>
+                      )}
+                    </td>
                     <td style={{ padding: "0.75rem 1rem" }}>
                       <form action={toggleStaffActive}>
                         <input type="hidden" name="id" value={s.id} />
