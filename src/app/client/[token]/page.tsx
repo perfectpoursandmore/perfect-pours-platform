@@ -56,7 +56,8 @@ export default async function ClientDocumentsPage({
 
       {!ready ? (
         <p style={{ color: "var(--color-muted)" }}>
-          Your proposal and contract aren&apos;t ready yet — check back soon, or reach out if you
+          Your proposal and contract aren&apos;t ready yet — check back soon, or reach out to{" "}
+          <a href="mailto:faith@perfectpoursandmore.com">faith@perfectpoursandmore.com</a> if you
           were expecting this link to be active.
         </p>
       ) : (
@@ -72,7 +73,7 @@ export default async function ClientDocumentsPage({
               <tbody>
                 {(items ?? []).map((item) => (
                   <tr key={item.id} style={{ borderBottom: "1px solid var(--color-border)" }}>
-                    <td style={{ padding: "0.5rem 0" }}>
+                    <td style={{ padding: "0.5rem 0", whiteSpace: "pre-line" }}>
                       {item.description} {item.quantity > 1 ? `(x${item.quantity})` : ""}
                     </td>
                     <td style={{ padding: "0.5rem 0", textAlign: "right" }}>{formatMoney(item.line_total)}</td>
@@ -160,6 +161,11 @@ export default async function ClientDocumentsPage({
           </section>
         </div>
       )}
+
+      <p style={{ color: "var(--color-muted)", fontSize: "0.85rem", marginTop: "2rem" }}>
+        Questions about your event or this page? Email{" "}
+        <a href="mailto:faith@perfectpoursandmore.com">faith@perfectpoursandmore.com</a>.
+      </p>
     </main>
   );
 }

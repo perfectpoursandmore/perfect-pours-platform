@@ -15,6 +15,7 @@ import {
   createAndSendBalanceInvoice,
   refreshBalanceInvoiceStatus,
 } from "./actions";
+import { AddProposalItemFields } from "./AddProposalItemFields";
 
 export default async function EventBookingPage({
   params,
@@ -49,7 +50,11 @@ export default async function EventBookingPage({
       .order("created_at", { ascending: false })
       .limit(1)
       .single(),
-    supabase.from("catalog_items").select("id, name, default_price, pricing_type").eq("active", true).order("name"),
+    supabase
+      .from("catalog_items")
+      .select("id, name, description, default_price, pricing_type")
+      .eq("active", true)
+      .order("name"),
     supabase.from("contract_templates").select("id, name").eq("active", true).order("created_at"),
     supabase.from("event_financials").select("*").eq("event_id", eventId).single(),
     supabase.from("qbo_connections").select("connected_at, realm_id").eq("id", true).single(),
@@ -207,7 +212,7 @@ export default async function EventBookingPage({
               <tbody>
                 {(items ?? []).map((item) => (
                   <tr key={item.id} style={{ borderBottom: "1px solid var(--color-border)" }}>
-                    <td style={{ padding: "0.5rem 0" }}>{item.description}</td>
+                    <td style={{ padding: "0.5rem 0", whiteSpace: "pre-line" }}>{item.description}</td>
                     <td style={{ padding: "0.5rem 0" }}>{item.quantity}</td>
                     <td style={{ padding: "0.5rem 0" }}>{formatMoney(item.unit_price)}</td>
                     <td style={{ padding: "0.5rem 0" }}>{formatMoney(item.line_total)}</td>
@@ -232,26 +237,7 @@ export default async function EventBookingPage({
             >
               <input type="hidden" name="proposalId" value={proposal.id} />
               <input type="hidden" name="eventId" value={eventId} />
-              <div>
-                <label htmlFor="catalogItemId">From catalog (optional)</label>
-                <select id="catalogItemId" name="catalogItemId" defaultValue="" style={selectStyle}>
-                  <option value="">— custom line —</option>
-                  {(catalogItems ?? []).map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name} ({formatMoney(c.default_price)})
-                    </option>
-                  ))}
-                </select>
-                <input name="description" placeholder="Description" required style={{ marginTop: "0.4rem" }} />
-              </div>
-              <div>
-                <label htmlFor="quantity">Qty</label>
-                <input id="quantity" name="quantity" type="number" step="0.5" defaultValue={1} />
-              </div>
-              <div>
-                <label htmlFor="unitPrice">Unit price</label>
-                <input id="unitPrice" name="unitPrice" type="number" step="0.01" defaultValue={0} />
-              </div>
+              <AddProposalItemFields catalogItems={catalogItems ?? []} />
               <input type="hidden" name="pricingType" value="flat" />
               <button type="submit" className="button">
                 Add line

@@ -137,7 +137,6 @@ export default async function CatalogPage() {
                         </button>
                       </form>
                     </div>
-                    </form>
                   </td>
                 </tr>
               ))}

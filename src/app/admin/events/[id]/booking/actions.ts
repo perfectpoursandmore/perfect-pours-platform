@@ -161,9 +161,16 @@ export async function generateContract(formData: FormData) {
     .eq("proposal_id", proposal!.id);
 
   const client = Array.isArray(event!.clients) ? event!.clients[0] : event!.clients;
+  // Price leads each entry (rather than trailing after the description) so a
+  // multi-line catalog description — a bar package's feature list, say —
+  // doesn't push its price down and away from the item it belongs to.
   const servicesList =
-    (items ?? []).map((i) => `- ${i.description} (x${i.quantity}) — ${formatMoney(i.line_total)}`).join("\n") ||
-    "(no line items yet)";
+    (items ?? [])
+      .map(
+        (i) =>
+          `${formatMoney(i.line_total)}${i.quantity > 1 ? ` (x${i.quantity})` : ""} — ${i.description}`
+      )
+      .join("\n\n") || "(no line items yet)";
 
   const vars = {
     client_name: client ? `${client.first_name} ${client.last_name}` : "",
