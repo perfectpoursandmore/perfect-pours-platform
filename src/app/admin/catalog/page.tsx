@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { PRICING_TYPE_LABELS, formatMoney } from "@/lib/labels";
 import { addCatalogItem, toggleCatalogItemActive } from "./actions";
@@ -33,8 +34,21 @@ export default async function CatalogPage() {
         </div>
 
         <div>
-          <label htmlFor="description">Description</label>
-          <input id="description" name="description" placeholder="e.g. Professional bartending staff for private events." />
+          <label htmlFor="description">Description (shown to clients on proposals)</label>
+          <textarea
+            id="description"
+            name="description"
+            placeholder="e.g. Professional bartending staff for private events."
+            rows={4}
+            style={{
+              width: "100%",
+              padding: "0.75rem",
+              borderRadius: 8,
+              border: "1px solid var(--color-border)",
+              fontFamily: "inherit",
+              fontSize: "0.9rem",
+            }}
+          />
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
@@ -87,7 +101,16 @@ export default async function CatalogPage() {
                   <td style={{ padding: "0.75rem 1rem" }}>
                     {item.name}
                     {item.description && (
-                      <div style={{ fontSize: "0.8rem", color: "var(--color-muted)" }}>{item.description}</div>
+                      <div
+                        style={{
+                          fontSize: "0.8rem",
+                          color: "var(--color-muted)",
+                          whiteSpace: "pre-line",
+                          maxWidth: 360,
+                        }}
+                      >
+                        {item.description}
+                      </div>
                     )}
                   </td>
                   <td style={{ padding: "0.75rem 1rem" }}>{item.category ?? "—"}</td>
@@ -99,15 +122,21 @@ export default async function CatalogPage() {
                   </td>
                   <td style={{ padding: "0.75rem 1rem" }}>{item.active ? "Active" : "Inactive"}</td>
                   <td style={{ padding: "0.75rem 1rem" }}>
-                    <form action={toggleCatalogItemActive}>
-                      <input type="hidden" name="id" value={item.id} />
-                      <input type="hidden" name="active" value={String(item.active)} />
-                      <button
-                        type="submit"
-                        style={{ background: "none", border: "none", color: "var(--color-accent)", cursor: "pointer" }}
-                      >
-                        {item.active ? "Deactivate" : "Reactivate"}
-                      </button>
+                    <div style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
+                      <Link href={`/admin/catalog/${item.id}/edit`} style={{ color: "var(--color-accent)" }}>
+                        Edit
+                      </Link>
+                      <form action={toggleCatalogItemActive}>
+                        <input type="hidden" name="id" value={item.id} />
+                        <input type="hidden" name="active" value={String(item.active)} />
+                        <button
+                          type="submit"
+                          style={{ background: "none", border: "none", color: "var(--color-accent)", cursor: "pointer", padding: 0 }}
+                        >
+                          {item.active ? "Deactivate" : "Reactivate"}
+                        </button>
+                      </form>
+                    </div>
                     </form>
                   </td>
                 </tr>

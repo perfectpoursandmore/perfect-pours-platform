@@ -26,6 +26,28 @@ export async function addCatalogItem(formData: FormData) {
   revalidatePath("/admin/catalog");
 }
 
+/** Edits an existing catalog item's name, category, price, pricing type, description, or notes. */
+export async function updateCatalogItem(formData: FormData) {
+  await requireAdmin();
+  const supabase = createClient();
+  const id = String(formData.get("id"));
+
+  await supabase
+    .from("catalog_items")
+    .update({
+      name: String(formData.get("name") ?? ""),
+      category: String(formData.get("category") ?? "") || null,
+      description: String(formData.get("description") ?? "") || null,
+      default_price: formData.get("defaultPrice") ? Number(formData.get("defaultPrice")) : null,
+      pricing_type: String(formData.get("pricingType") ?? "flat"),
+      internal_notes: String(formData.get("internalNotes") ?? "") || null,
+    })
+    .eq("id", id);
+
+  revalidatePath("/admin/catalog");
+  redirect("/admin/catalog");
+}
+
 export async function toggleCatalogItemActive(formData: FormData) {
   await requireAdmin();
   const supabase = createClient();
