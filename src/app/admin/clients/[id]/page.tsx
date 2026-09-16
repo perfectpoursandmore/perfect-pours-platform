@@ -99,7 +99,12 @@ export default async function ClientDetailPage({
       </form>
 
       <div className="card">
-        <h2 style={{ marginTop: 0, fontSize: "1rem" }}>Events</h2>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
+          <h2 style={{ margin: 0, fontSize: "1rem" }}>Events</h2>
+          <a href={`/admin/events/new?clientId=${client.id}`} style={{ fontSize: "0.9rem" }}>
+            + Add booking for {client.first_name}
+          </a>
+        </div>
         {events && events.length > 0 ? (
           <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: "0.5rem" }}>
             {events.map((event) => (

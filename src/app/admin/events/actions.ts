@@ -100,6 +100,83 @@ export async function createClientAndAssignToEvent(formData: FormData) {
   revalidatePath("/admin/clients");
 }
 
+/**
+ * Adds a booking that never went through the public consultation form at
+ * all — a returning client who texted or called Faith directly. Either
+ * picks an existing client or creates a new one inline, then creates the
+ * event straight into whatever status Faith picks (usually "Booked" for a
+ * client who's already confirmed), so it shows up on the staff calendar
+ * immediately without needing a lead or a deposit invoice first.
+ */
+export async function createEventDirect(formData: FormData) {
+  await requireAdmin();
+  const supabase = createClient();
+
+  let clientId = String(formData.get("clientId") ?? "");
+  const newFirstName = String(formData.get("newFirstName") ?? "").trim();
+
+  if (!clientId) {
+    if (!newFirstName) {
+      redirect("/admin/events/new?error=Pick an existing client, or enter a first name for a new one.");
+    }
+
+    const { data: newClient, error: clientError } = await supabase
+      .from("clients")
+      .insert({
+        first_name: newFirstName,
+        last_name: String(formData.get("newLastName") ?? "").trim(),
+        email: nullIfEmpty(formData.get("newEmail")),
+        phone: nullIfEmpty(formData.get("newPhone")),
+      })
+      .select("id")
+      .single();
+
+    if (clientError || !newClient) {
+      redirect("/admin/events/new?error=Couldn't create that client.");
+    }
+
+    clientId = newClient!.id;
+  }
+
+  const name = String(formData.get("name") ?? "").trim();
+  const eventDate = String(formData.get("eventDate") ?? "");
+
+  if (!name || !eventDate) {
+    redirect("/admin/events/new?error=Event name and date are required.");
+  }
+
+  const guestCountRaw = formData.get("guestCount");
+  const guestCount = guestCountRaw ? Number(guestCountRaw) : null;
+
+  const { data: event, error: eventError } = await supabase
+    .from("events")
+    .insert({
+      client_id: clientId,
+      name,
+      event_type: String(formData.get("eventType") ?? "").trim() || "Other",
+      event_date: eventDate,
+      status: String(formData.get("status") ?? "booked"),
+      venue_name: nullIfEmpty(formData.get("venueName")),
+      address_line: nullIfEmpty(formData.get("addressLine")),
+      city: nullIfEmpty(formData.get("city")),
+      state: nullIfEmpty(formData.get("state")),
+      zip: nullIfEmpty(formData.get("zip")),
+      guest_count: guestCount,
+    })
+    .select("id")
+    .single();
+
+  if (eventError || !event) {
+    redirect("/admin/events/new?error=Couldn't create that event.");
+  }
+
+  revalidatePath("/admin/events");
+  revalidatePath("/admin/clients");
+  revalidatePath("/staff");
+
+  redirect(`/admin/events/${event!.id}`);
+}
+
 export async function addEventNote(formData: FormData) {
   await requireAdmin();
   const supabase = createClient();

@@ -10,9 +10,14 @@ export default async function EventsPage() {
 
   return (
     <div style={{ display: "grid", gap: "1.5rem" }}>
-      <div>
-        <h1 style={{ margin: 0 }}>Events</h1>
-        <p style={{ color: "var(--color-muted)" }}>Every event, past and upcoming.</p>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", gap: "1rem", flexWrap: "wrap" }}>
+        <div>
+          <h1 style={{ margin: 0 }}>Events</h1>
+          <p style={{ color: "var(--color-muted)" }}>Every event, past and upcoming.</p>
+        </div>
+        <a href="/admin/events/new" className="button">
+          + Add booking
+        </a>
       </div>
 
       <div className="card" style={{ padding: 0 }}>
@@ -49,7 +54,8 @@ export default async function EventsPage() {
           </table>
         ) : (
           <p style={{ padding: "1.5rem", color: "var(--color-muted)", margin: 0 }}>
-            No events yet — they show up here once a lead is converted.
+            No events yet — they show up here once a lead is converted, or you add a booking
+            directly above.
           </p>
         )}
       </div>
