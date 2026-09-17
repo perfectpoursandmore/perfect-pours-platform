@@ -15,9 +15,18 @@ export default async function EventsPage() {
           <h1 style={{ margin: 0 }}>Events</h1>
           <p style={{ color: "var(--color-muted)" }}>Every event, past and upcoming.</p>
         </div>
-        <a href="/admin/events/new" className="button">
-          + Add booking
-        </a>
+        <div style={{ display: "flex", gap: "0.75rem" }}>
+          <a
+            href="/admin/events/import-times"
+            className="button"
+            style={{ background: "none", border: "1px solid var(--color-border)", color: "inherit" }}
+          >
+            Import times from spreadsheet
+          </a>
+          <a href="/admin/events/new" className="button">
+            + Add booking
+          </a>
+        </div>
       </div>
 
       <div className="card" style={{ padding: 0 }}>
