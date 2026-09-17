@@ -6,6 +6,7 @@ import {
   commitStaffTimesImport,
   commitStaffAssignmentsImport,
   type ParsedRow,
+  type ParsedRowCandidate,
 } from "./actions";
 
 type StaffSelection = {
@@ -13,6 +14,7 @@ type StaffSelection = {
   isOpenSlot: boolean;
   chosenId: string; // a staff id, or "" for "not included"
   included: boolean;
+  candidates: ParsedRowCandidate[];
 };
 
 type EditableRow = ParsedRow & {
@@ -63,6 +65,7 @@ export function ImportTimesForm() {
             isOpenSlot: t.isOpenSlot,
             chosenId: t.isOpenSlot ? "" : t.matchedStaffId ?? "",
             included: t.isOpenSlot || t.matchedStaffId !== null,
+            candidates: t.candidates,
           })),
         }))
       );
