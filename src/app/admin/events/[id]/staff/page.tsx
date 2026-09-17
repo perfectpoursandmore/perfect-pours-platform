@@ -3,6 +3,7 @@ import { formatDateTime, formatMoney } from "@/lib/labels";
 import {
   assignStaffToEvent,
   removeEventStaffAssignment,
+  updateEventStaffRole,
   upsertEventStaffPayout,
   requestStaffAvailability,
   withdrawAvailabilityRequest,
@@ -191,29 +192,70 @@ export default async function EventStaffPage({ params }: { params: { id: string 
 
               return (
                 <div key={a.id} style={{ borderBottom: "1px solid var(--color-border)", paddingBottom: "1rem" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
-                    <span>
-                      <strong>
-                        {a.is_open ? (
-                          <em style={{ color: "var(--color-muted)", fontStyle: "normal" }}>Open</em>
-                        ) : staffPerson ? (
-                          `${staffPerson.first_name} ${staffPerson.last_name}`
-                        ) : (
-                          "—"
-                        )}
-                      </strong>{" "}
-                      — {a.role}
-                    </span>
-                    <form action={removeEventStaffAssignment}>
-                      <input type="hidden" name="id" value={a.id} />
-                      <input type="hidden" name="eventId" value={params.id} />
-                      <button
-                        type="submit"
-                        style={{ background: "none", border: "none", color: "var(--color-accent)", cursor: "pointer" }}
-                      >
-                        Remove
-                      </button>
-                    </form>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      marginBottom: "0.5rem",
+                      flexWrap: "wrap",
+                      gap: "0.5rem",
+                    }}
+                  >
+                    <strong>
+                      {a.is_open ? (
+                        <em style={{ color: "var(--color-muted)", fontStyle: "normal" }}>Open</em>
+                      ) : staffPerson ? (
+                        `${staffPerson.first_name} ${staffPerson.last_name}`
+                      ) : (
+                        "—"
+                      )}
+                    </strong>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                      <form action={updateEventStaffRole} style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                        <input type="hidden" name="id" value={a.id} />
+                        <input type="hidden" name="eventId" value={params.id} />
+                        <select
+                          name="role"
+                          defaultValue={a.role}
+                          style={{
+                            padding: "0.35rem 0.5rem",
+                            borderRadius: 6,
+                            border: "1px solid var(--color-border)",
+                            color: ROLE_OPTIONS.includes(a.role) ? "inherit" : "#a33",
+                          }}
+                        >
+                          {(ROLE_OPTIONS.includes(a.role) ? ROLE_OPTIONS : [a.role, ...ROLE_OPTIONS]).map((role) => (
+                            <option key={role} value={role}>
+                              {ROLE_OPTIONS.includes(role) ? role[0].toUpperCase() + role.slice(1) : `⚠ ${role} — pick a role`}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="submit"
+                          style={{
+                            background: "none",
+                            border: "1px solid var(--color-border)",
+                            borderRadius: 6,
+                            padding: "0.35rem 0.6rem",
+                            cursor: "pointer",
+                            fontSize: "0.85rem",
+                          }}
+                        >
+                          Save
+                        </button>
+                      </form>
+                      <form action={removeEventStaffAssignment}>
+                        <input type="hidden" name="id" value={a.id} />
+                        <input type="hidden" name="eventId" value={params.id} />
+                        <button
+                          type="submit"
+                          style={{ background: "none", border: "none", color: "var(--color-accent)", cursor: "pointer" }}
+                        >
+                          Remove
+                        </button>
+                      </form>
+                    </div>
                   </div>
 
                   {!a.is_open && staffPerson && (

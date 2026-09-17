@@ -1,13 +1,31 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { parseStaffTimesFile, commitStaffTimesImport, type ParsedRow } from "./actions";
+import {
+  parseStaffTimesFile,
+  commitStaffTimesImport,
+  commitStaffAssignmentsImport,
+  type ParsedRow,
+} from "./actions";
+
+type StaffSelection = {
+  raw: string;
+  isOpenSlot: boolean;
+  chosenId: string; // a staff id, or "" for "not included"
+  included: boolean;
+};
 
 type EditableRow = ParsedRow & {
   included: boolean;
   staffArrivalOverride: string;
   guestArrivalOverride: string;
   staffEndOverride: string;
+  staffSelections: StaffSelection[];
+};
+
+type ImportResult = {
+  time: { updated: number; errors: string[] };
+  staff: { assigned: number; openAdded: number; skipped: number; errors: string[] };
 };
 
 export function ImportTimesForm() {
@@ -15,7 +33,7 @@ export function ImportTimesForm() {
   const [parseError, setParseError] = useState<string | null>(null);
   const [isParsing, startParsing] = useTransition();
   const [isCommitting, startCommitting] = useTransition();
-  const [result, setResult] = useState<{ updated: number; errors: string[] } | null>(null);
+  const [result, setResult] = useState<ImportResult | null>(null);
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -40,6 +58,12 @@ export function ImportTimesForm() {
           staffArrivalOverride: r.staffArrivalTime ?? "",
           guestArrivalOverride: r.guestArrivalTime ?? "",
           staffEndOverride: r.staffEndTime ?? "",
+          staffSelections: r.staffTokens.map((t) => ({
+            raw: t.raw,
+            isOpenSlot: t.isOpenSlot,
+            chosenId: t.isOpenSlot ? "" : t.matchedStaffId ?? "",
+            included: t.isOpenSlot || t.matchedStaffId !== null,
+          })),
         }))
       );
     });
@@ -49,21 +73,51 @@ export function ImportTimesForm() {
     setRows((prev) => (prev ? prev.map((r, i) => (i === index ? { ...r, ...patch } : r)) : prev));
   }
 
+  function updateStaffSelection(rowIndex: number, tokenIndex: number, patch: Partial<StaffSelection>) {
+    setRows((prev) =>
+      prev
+        ? prev.map((r, i) =>
+            i === rowIndex
+              ? {
+                  ...r,
+                  staffSelections: r.staffSelections.map((s, j) => (j === tokenIndex ? { ...s, ...patch } : s)),
+                }
+              : r
+          )
+        : prev
+    );
+  }
+
   function handleImport() {
     if (!rows) return;
-    const selected = rows.filter((r) => r.included && r.selectedEventId && r.eventDateIso);
+    const activeRows = rows.filter((r) => r.included && r.selectedEventId && r.eventDateIso);
+
+    const timeRows = activeRows.map((r) => ({
+      eventId: r.selectedEventId as string,
+      eventDateIso: r.eventDateIso as string,
+      staffArrivalTime: r.staffArrivalOverride || null,
+      guestArrivalTime: r.guestArrivalOverride || null,
+      staffEndTime: r.staffEndOverride || null,
+    }));
+
+    const staffRows = activeRows
+      .map((r) => ({
+        eventId: r.selectedEventId as string,
+        staffIds: r.staffSelections
+          .filter((s) => s.included && !s.isOpenSlot && s.chosenId)
+          .map((s) => s.chosenId),
+        openSlotCount: r.staffSelections.filter((s) => s.included && s.isOpenSlot).length,
+      }))
+      .filter((r) => r.staffIds.length > 0 || r.openSlotCount > 0);
 
     startCommitting(async () => {
-      const res = await commitStaffTimesImport(
-        selected.map((r) => ({
-          eventId: r.selectedEventId as string,
-          eventDateIso: r.eventDateIso as string,
-          staffArrivalTime: r.staffArrivalOverride || null,
-          guestArrivalTime: r.guestArrivalOverride || null,
-          staffEndTime: r.staffEndOverride || null,
-        }))
-      );
-      setResult(res);
+      const [timeResult, staffResult] = await Promise.all([
+        commitStaffTimesImport(timeRows),
+        staffRows.length > 0
+          ? commitStaffAssignmentsImport(staffRows)
+          : Promise.resolve({ assigned: 0, openAdded: 0, skipped: 0, errors: [] as string[] }),
+      ]);
+      setResult({ time: timeResult, staff: staffResult });
     });
   }
 
@@ -77,8 +131,10 @@ export function ImportTimesForm() {
         <p style={{ color: "var(--color-muted)", fontSize: "0.85rem", margin: 0 }}>
           Works with a sheet that has a &quot;Date&quot; column plus staff arrival / end (and, if your
           file has it, event start) time columns — column names just need to contain those words
-          somewhere, so it&apos;s fine if they don&apos;t match exactly. Nothing is saved to any event
-          until you review the matches below and click Import.
+          somewhere. If there&apos;s a &quot;Staff&quot; column too, names get matched to your staff list and
+          added to the event (unfilled slots like &quot;_____&quot; are added as open positions) — you still
+          pick each person&apos;s role afterward on the event&apos;s Staff tab. Nothing is saved until you
+          review everything below and click Import.
         </p>
         {isParsing && <p style={{ color: "var(--color-muted)", margin: 0 }}>Reading file…</p>}
         {parseError && <p style={{ color: "#a33", margin: 0 }}>{parseError}</p>}
@@ -102,6 +158,7 @@ export function ImportTimesForm() {
                   <th style={{ padding: "0.6rem" }}>Staff arrival</th>
                   <th style={{ padding: "0.6rem" }}>Event start (guest arrival)</th>
                   <th style={{ padding: "0.6rem" }}>Staff end</th>
+                  <th style={{ padding: "0.6rem" }}>Staff to add</th>
                 </tr>
               </thead>
               <tbody>
@@ -172,6 +229,54 @@ export function ImportTimesForm() {
                         onChange={(e) => updateRow(i, { staffEndOverride: e.target.value })}
                       />
                     </td>
+                    <td style={{ padding: "0.6rem", minWidth: 220 }}>
+                      {r.staffSelections.length === 0 ? (
+                        <span style={{ color: "var(--color-muted)" }}>—</span>
+                      ) : (
+                        <div style={{ display: "grid", gap: "0.35rem" }}>
+                          {r.staffSelections.map((s, j) =>
+                            s.isOpenSlot ? (
+                              <label key={j} style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                                <input
+                                  type="checkbox"
+                                  checked={s.included}
+                                  onChange={(e) => updateStaffSelection(i, j, { included: e.target.checked })}
+                                />
+                                <em style={{ fontStyle: "normal", color: "var(--color-muted)" }}>
+                                  Open position ({s.raw})
+                                </em>
+                              </label>
+                            ) : (
+                              <div key={j} style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                                <input
+                                  type="checkbox"
+                                  checked={s.included}
+                                  disabled={!s.chosenId}
+                                  onChange={(e) => updateStaffSelection(i, j, { included: e.target.checked })}
+                                />
+                                <select
+                                  value={s.chosenId}
+                                  onChange={(e) =>
+                                    updateStaffSelection(i, j, {
+                                      chosenId: e.target.value,
+                                      included: e.target.value ? true : s.included,
+                                    })
+                                  }
+                                  style={{ padding: "0.3rem", borderRadius: 6, border: "1px solid var(--color-border)" }}
+                                >
+                                  <option value="">— &quot;{s.raw}&quot;: no match, skip —</option>
+                                  {s.candidates.map((c) => (
+                                    <option key={c.id} value={c.id}>
+                                      {c.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            )
+                          )}
+                        </div>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -188,17 +293,23 @@ export function ImportTimesForm() {
               {isCommitting ? "Importing…" : `Import ${matchedCount} selected row${matchedCount === 1 ? "" : "s"}`}
             </button>
             {result && (
-              <span style={{ color: result.errors.length ? "#a33" : "#2a7a2a" }}>
-                {result.updated} event{result.updated === 1 ? "" : "s"} updated.
-                {result.errors.length > 0 && ` ${result.errors.length} error(s) below.`}
+              <span style={{ color: result.time.errors.length || result.staff.errors.length ? "#a33" : "#2a7a2a" }}>
+                {result.time.updated} event{result.time.updated === 1 ? "" : "s"} updated with times.{" "}
+                {result.staff.assigned} staff assignment{result.staff.assigned === 1 ? "" : "s"} added,{" "}
+                {result.staff.openAdded} open position{result.staff.openAdded === 1 ? "" : "s"} added
+                {result.staff.skipped > 0 ? `, ${result.staff.skipped} already there (skipped)` : ""}.
+                {(result.time.errors.length || result.staff.errors.length) > 0 && " Errors below."}
               </span>
             )}
           </div>
 
-          {result && result.errors.length > 0 && (
+          {result && (result.time.errors.length > 0 || result.staff.errors.length > 0) && (
             <ul style={{ color: "#a33" }}>
-              {result.errors.map((e, i) => (
-                <li key={i}>{e}</li>
+              {result.time.errors.map((e, i) => (
+                <li key={`t${i}`}>{e}</li>
+              ))}
+              {result.staff.errors.map((e, i) => (
+                <li key={`s${i}`}>{e}</li>
               ))}
             </ul>
           )}

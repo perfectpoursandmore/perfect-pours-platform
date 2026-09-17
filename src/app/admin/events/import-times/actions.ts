@@ -98,11 +98,29 @@ function findColumn(header: string[], predicate: (h: string) => boolean): number
   return header.findIndex(predicate);
 }
 
+// Faith's own notation for "still need someone here" — e.g. "Evi, _____" is
+// Evi confirmed plus one open position still needed.
+const BLANK_SLOT_RE = /^[_\-\s]{2,}$|^(tbd|open|unfilled|n\/a|\?+)$/i;
+
+function splitStaffNames(raw: string): string[] {
+  return raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
+
 function cell(row: unknown[], index: number): unknown {
   return index >= 0 ? row[index] : undefined;
 }
 
 export type ParsedRowCandidate = { id: string; label: string };
+
+export type StaffToken = {
+  raw: string;
+  isOpenSlot: boolean;
+  matchedStaffId: string | null;
+  candidates: ParsedRowCandidate[];
+};
 
 export type ParsedRow = {
   sheetName: string;
@@ -112,6 +130,7 @@ export type ParsedRow = {
   staffTimeRaw: string;
   endTimeRaw: string;
   guestArrivalRaw: string;
+  staffNamesRaw: string;
   eventDateIso: string | null;
   staffArrivalTime: string | null;
   guestArrivalTime: string | null;
@@ -119,6 +138,7 @@ export type ParsedRow = {
   timeNeedsReview: boolean;
   candidates: ParsedRowCandidate[];
   selectedEventId: string | null;
+  staffTokens: StaffToken[];
 };
 
 export async function parseStaffTimesFile(formData: FormData): Promise<{ rows: ParsedRow[]; error?: string }> {
@@ -153,6 +173,22 @@ export async function parseStaffTimesFile(formData: FormData): Promise<{ rows: P
     eventsByDate.set(e.event_date, list);
   }
 
+  const { data: staffData } = await supabase
+    .from("staff")
+    .select("id, first_name, last_name")
+    .eq("active", true);
+
+  const staffByFirstName = new Map<string, ParsedRowCandidate[]>();
+  const allActiveStaff: ParsedRowCandidate[] = [];
+  for (const s of staffData ?? []) {
+    const entry = { id: s.id, label: `${s.first_name} ${s.last_name}` };
+    allActiveStaff.push(entry);
+    const key = s.first_name.trim().toLowerCase();
+    const list = staffByFirstName.get(key) ?? [];
+    list.push(entry);
+    staffByFirstName.set(key, list);
+  }
+
   const rows: ParsedRow[] = [];
   const currentYear = new Date().getFullYear();
 
@@ -172,6 +208,10 @@ export async function parseStaffTimesFile(formData: FormData): Promise<{ rows: P
       header,
       (h) => (h.includes("guest") || h.includes("start")) && !h.includes("staff")
     );
+    const staffNamesCol = findColumn(
+      header,
+      (h) => h === "staff" || (h.includes("staff") && !h.includes("time") && !h.includes("end") && !h.includes("arrival"))
+    );
 
     const sheetYearMatch = sheetName.match(/\d{4}/);
     const fallbackYear = sheetYearMatch ? Number(sheetYearMatch[0]) : currentYear;
@@ -183,8 +223,9 @@ export async function parseStaffTimesFile(formData: FormData): Promise<{ rows: P
       const staffTimeRaw = String(cell(row, staffTimeCol) ?? "").trim();
       const endTimeRaw = String(cell(row, endTimeCol) ?? "").trim();
       const guestArrivalRaw = String(cell(row, guestArrivalCol) ?? "").trim();
+      const staffNamesRaw = String(cell(row, staffNamesCol) ?? "").trim();
 
-      if (!dateRaw && !clientNameRaw && !staffTimeRaw && !endTimeRaw && !guestArrivalRaw) continue;
+      if (!dateRaw && !clientNameRaw && !staffTimeRaw && !endTimeRaw && !guestArrivalRaw && !staffNamesRaw) continue;
 
       const eventDateIso = parseSheetDate(dateRaw, fallbackYear);
       const staffArrival = parseTimeCell(staffTimeRaw);
@@ -201,6 +242,22 @@ export async function parseStaffTimesFile(formData: FormData): Promise<{ rows: P
         if (filtered.length === 1) selectedEventId = filtered[0].id;
       }
 
+      const staffTokens: StaffToken[] = splitStaffNames(staffNamesRaw).map((token) => {
+        if (BLANK_SLOT_RE.test(token)) {
+          return { raw: token, isOpenSlot: true, matchedStaffId: null, candidates: [] };
+        }
+        const matches = staffByFirstName.get(token.toLowerCase()) ?? [];
+        if (matches.length === 1) {
+          return { raw: token, isOpenSlot: false, matchedStaffId: matches[0].id, candidates: matches };
+        }
+        return {
+          raw: token,
+          isOpenSlot: false,
+          matchedStaffId: null,
+          candidates: matches.length > 1 ? matches : allActiveStaff,
+        };
+      });
+
       rows.push({
         sheetName,
         rowNumber: i + 1,
@@ -209,6 +266,7 @@ export async function parseStaffTimesFile(formData: FormData): Promise<{ rows: P
         staffTimeRaw,
         endTimeRaw,
         guestArrivalRaw,
+        staffNamesRaw,
         eventDateIso,
         staffArrivalTime: staffArrival.value,
         guestArrivalTime: guestArrival.value,
@@ -216,6 +274,7 @@ export async function parseStaffTimesFile(formData: FormData): Promise<{ rows: P
         timeNeedsReview: staffArrival.needsReview || staffEnd.needsReview || guestArrival.needsReview,
         candidates: candidates.map((c) => ({ id: c.id, label: c.label })),
         selectedEventId,
+        staffTokens,
       });
     }
   }
@@ -267,4 +326,81 @@ export async function commitStaffTimesImport(rows: CommitRow[]): Promise<{ updat
   revalidatePath("/staff");
 
   return { updated, errors };
+}
+
+export type StaffAssignmentCommitRow = {
+  eventId: string;
+  staffIds: string[]; // people confirmed for this event
+  openSlotCount: number; // additional unfilled positions still needed
+};
+
+/**
+ * Adds who's working each event, without picking a role for them — Faith's
+ * spreadsheet doesn't break staff down by role, so these land as
+ * role: "unassigned" and she fixes the role afterward on the event's Staff
+ * tab (see updateEventStaffRole in ../actions.ts). Safe to run more than
+ * once on the same file: already-assigned staff are skipped, and open
+ * slots only get topped up to the count this row asks for, not duplicated.
+ */
+export async function commitStaffAssignmentsImport(
+  rows: StaffAssignmentCommitRow[]
+): Promise<{ assigned: number; openAdded: number; skipped: number; errors: string[] }> {
+  await requireAdmin();
+  const supabase = createClient();
+
+  let assigned = 0;
+  let openAdded = 0;
+  let skipped = 0;
+  const errors: string[] = [];
+
+  for (const r of rows) {
+    if (r.staffIds.length === 0 && r.openSlotCount === 0) continue;
+
+    const { data: existing, error: fetchError } = await supabase
+      .from("event_staff")
+      .select("staff_id, is_open")
+      .eq("event_id", r.eventId);
+
+    if (fetchError) {
+      errors.push(`${r.eventId}: ${fetchError.message}`);
+      continue;
+    }
+
+    const existingStaffIds = new Set(
+      (existing ?? []).filter((e) => e.staff_id).map((e) => e.staff_id as string)
+    );
+    const existingOpenCount = (existing ?? []).filter((e) => e.is_open).length;
+
+    const toInsert: { event_id: string; staff_id: string | null; role: string; is_open: boolean }[] = [];
+
+    for (const staffId of r.staffIds) {
+      if (existingStaffIds.has(staffId)) {
+        skipped++;
+        continue;
+      }
+      toInsert.push({ event_id: r.eventId, staff_id: staffId, role: "unassigned", is_open: false });
+      existingStaffIds.add(staffId);
+    }
+
+    const openShortfall = Math.max(0, r.openSlotCount - existingOpenCount);
+    for (let i = 0; i < openShortfall; i++) {
+      toInsert.push({ event_id: r.eventId, staff_id: null, role: "unassigned", is_open: true });
+    }
+
+    if (toInsert.length === 0) continue;
+
+    const { error: insertError } = await supabase.from("event_staff").insert(toInsert);
+    if (insertError) {
+      errors.push(`${r.eventId}: ${insertError.message}`);
+      continue;
+    }
+
+    assigned += toInsert.filter((t) => !t.is_open).length;
+    openAdded += toInsert.filter((t) => t.is_open).length;
+  }
+
+  revalidatePath("/admin/events");
+  revalidatePath("/staff");
+
+  return { assigned, openAdded, skipped, errors };
 }

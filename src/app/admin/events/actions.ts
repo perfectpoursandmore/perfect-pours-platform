@@ -228,6 +228,26 @@ export async function assignStaffToEvent(formData: FormData) {
 }
 
 /**
+ * Changes the role on an existing assignment/open-slot row — used both for
+ * ordinary corrections and for the placeholder "unassigned" role left by
+ * the spreadsheet import (which adds who's working an event without
+ * guessing at a role for them).
+ */
+export async function updateEventStaffRole(formData: FormData) {
+  await requireAdmin();
+  const supabase = createClient();
+  const id = String(formData.get("id"));
+  const eventId = String(formData.get("eventId"));
+  const role = String(formData.get("role") ?? "").trim();
+
+  if (!role) return;
+
+  await supabase.from("event_staff").update({ role }).eq("id", id);
+
+  revalidatePath(`/admin/events/${eventId}/staff`);
+}
+
+/**
  * Asks one or more staff whether they're free for this event — an email
  * with a Yes/No link, NOT an assignment. This is deliberately separate from
  * assignStaffToEvent below: Faith often asks several people about the same
