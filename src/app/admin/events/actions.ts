@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/roles";
 import { isEmailConfigured, sendTemplatedEmail } from "@/lib/email";
 import { formatDate } from "@/lib/labels";
+import { zonedTimeToIso } from "@/lib/calendar-dates";
 
 async function requireAdmin() {
   const user = await getCurrentUser();
@@ -24,13 +25,21 @@ export async function updateEventOverview(formData: FormData) {
 
   const guestCountRaw = formData.get("guestCount");
   const guestCount = guestCountRaw ? Number(guestCountRaw) : null;
+  const eventDate = String(formData.get("eventDate") ?? "");
+
+  // Staff/guest arrival and staff end time are plain <input type="time">
+  // values (just "HH:MM") — always on this same event date, so they're
+  // combined with it here rather than asking for a separate date+time pair.
+  const staffArrivalTime = zonedTimeToIso(eventDate, String(formData.get("staffArrivalTime") ?? ""));
+  const guestArrivalTime = zonedTimeToIso(eventDate, String(formData.get("guestArrivalTime") ?? ""));
+  const staffEndTime = zonedTimeToIso(eventDate, String(formData.get("staffEndTime") ?? ""));
 
   await supabase
     .from("events")
     .update({
       name: String(formData.get("name") ?? ""),
       event_type: String(formData.get("eventType") ?? ""),
-      event_date: String(formData.get("eventDate") ?? ""),
+      event_date: eventDate,
       status: String(formData.get("status") ?? "inquiry"),
       venue_name: nullIfEmpty(formData.get("venueName")),
       address_line: nullIfEmpty(formData.get("addressLine")),
@@ -38,6 +47,9 @@ export async function updateEventOverview(formData: FormData) {
       state: nullIfEmpty(formData.get("state")),
       zip: nullIfEmpty(formData.get("zip")),
       guest_count: guestCount,
+      staff_arrival_time: staffArrivalTime,
+      guest_arrival_time: guestArrivalTime,
+      staff_end_time: staffEndTime,
       serveware_type: nullIfEmpty(formData.get("servewareType")),
       staff_instructions: nullIfEmpty(formData.get("staffInstructions")),
     })
@@ -355,4 +367,32 @@ export async function upsertEventStaffPayout(formData: FormData) {
 
   if (eventId) revalidatePath(`/admin/events/${eventId}/staff`);
   revalidatePath("/admin/payouts");
+}
+
+/**
+ * Permanently deletes an event and everything tied to it — staffing,
+ * availability asks, proposal, contract, notes, financials (all cascade
+ * automatically, see the migrations). For a pure mistake, like an
+ * accidental duplicate booking. For a real client cancellation, set the
+ * event's Status to "Cancelled" on this same page instead, so there's
+ * still a record of it — this delete can't be undone.
+ */
+export async function deleteEvent(formData: FormData) {
+  await requireAdmin();
+  const supabase = createClient();
+  const id = String(formData.get("id"));
+
+  // A lead that was converted into this event points back at it via
+  // leads.event_id, which has no cascade — clear that link first or the
+  // delete below fails with a foreign-key error.
+  await supabase.from("leads").update({ event_id: null }).eq("event_id", id);
+
+  await supabase.from("events").delete().eq("id", id);
+
+  revalidatePath("/admin/events");
+  revalidatePath("/admin/calendar");
+  revalidatePath("/admin/clients");
+  revalidatePath("/admin/payouts");
+  revalidatePath("/staff");
+  redirect("/admin/events");
 }

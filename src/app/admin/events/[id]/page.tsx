@@ -1,6 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { EVENT_STATUS_LABELS } from "@/lib/labels";
-import { updateEventOverview, reassignEventClient, createClientAndAssignToEvent } from "../actions";
+import { timeOfDayInZone } from "@/lib/calendar-dates";
+import { updateEventOverview, reassignEventClient, createClientAndAssignToEvent, deleteEvent } from "../actions";
+import { DeleteEventButton } from "../DeleteEventButton";
 
 export default async function EventOverviewPage({
   params,
@@ -163,6 +165,36 @@ export default async function EventOverviewPage({
         pricing.
       </p>
 
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "1rem" }}>
+        <div>
+          <label htmlFor="staffArrivalTime">Staff arrival time</label>
+          <input
+            id="staffArrivalTime"
+            name="staffArrivalTime"
+            type="time"
+            defaultValue={timeOfDayInZone(event.staff_arrival_time)}
+          />
+        </div>
+        <div>
+          <label htmlFor="guestArrivalTime">Event start (guest arrival)</label>
+          <input
+            id="guestArrivalTime"
+            name="guestArrivalTime"
+            type="time"
+            defaultValue={timeOfDayInZone(event.guest_arrival_time)}
+          />
+        </div>
+        <div>
+          <label htmlFor="staffEndTime">Staff end time</label>
+          <input
+            id="staffEndTime"
+            name="staffEndTime"
+            type="time"
+            defaultValue={timeOfDayInZone(event.staff_end_time)}
+          />
+        </div>
+      </div>
+
       <div>
         <label htmlFor="servewareType">Glassware or disposable</label>
         <select
@@ -198,6 +230,19 @@ export default async function EventOverviewPage({
         Save
       </button>
     </form>
+
+      <div className="card" style={{ display: "grid", gap: "0.75rem", borderColor: "#a33" }}>
+        <h2 style={{ marginTop: 0, fontSize: "1rem", color: "#a33" }}>Delete event</h2>
+        <p style={{ margin: 0, color: "var(--color-muted)", fontSize: "0.9rem" }}>
+          For an accidental duplicate or a mistake — this permanently removes the event and
+          everything tied to it (staffing, proposal, contract). For a real cancellation, use the
+          Status dropdown above instead, so you keep a record of it.
+        </p>
+        <form action={deleteEvent}>
+          <input type="hidden" name="id" value={event.id} />
+          <DeleteEventButton eventName={event.name} />
+        </form>
+      </div>
     </>
   );
 }

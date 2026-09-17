@@ -102,3 +102,55 @@ export function weekLabel(dateStr: string): string {
   };
   return `${fmt(start)} – ${fmt(end)}`;
 }
+
+/**
+ * The business's UTC offset (e.g. "-04:00") on a given calendar date, for
+ * building a timestamptz from a plain "this event's day, this time of day"
+ * input — the offset shifts with daylight saving, so it can't be hardcoded.
+ * Reads it off noon UTC of that date rather than the actual time-of-day, so
+ * a arrival time typed near a DST changeover still gets that whole day's
+ * normal offset instead of a rare, confusing edge case.
+ */
+function zonedOffset(dateStr: string, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    timeZoneName: "shortOffset",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date(`${dateStr}T12:00:00Z`));
+  const tzName = parts.find((p) => p.type === "timeZoneName")?.value ?? "GMT+0";
+  const match = tzName.match(/GMT([+-]\d{1,2})(?::?(\d{2}))?/);
+  if (!match) return "+00:00";
+  const sign = match[1].startsWith("-") ? "-" : "+";
+  const hours = String(Math.abs(Number(match[1]))).padStart(2, "0");
+  const minutes = match[2] ?? "00";
+  return `${sign}${hours}:${minutes}`;
+}
+
+/**
+ * Combines a "YYYY-MM-DD" event date with a "HH:MM" time-of-day (both as
+ * typed into a plain <input type="time">) into the ISO instant to store in
+ * a timestamptz column — staff/guest arrival and staff end time are always
+ * on the event's own day, so there's no separate date picker for these.
+ */
+export function zonedTimeToIso(
+  dateStr: string,
+  timeStr: string,
+  timeZone = "America/New_York"
+): string | null {
+  if (!dateStr || !timeStr) return null;
+  const offset = zonedOffset(dateStr, timeZone);
+  return new Date(`${dateStr}T${timeStr}:00${offset}`).toISOString();
+}
+
+/** The reverse of the above — what to put in that <input type="time">'s defaultValue. */
+export function timeOfDayInZone(iso: string | null, timeZone = "America/New_York"): string {
+  if (!iso) return "";
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(new Date(iso));
+}
