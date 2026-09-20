@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/roles";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getValidAccessToken, getBusyBlocks } from "@/lib/google-calendar";
 
 // TEMPORARY diagnostic route -- admin-only. Delete once the Google
 // Calendar refresh-token issue is resolved.
@@ -50,6 +51,24 @@ export async function GET() {
 
   const bodyText = await res.text();
 
+  // Step 2: call the ACTUAL app code path (getValidAccessToken -> getBusyBlocks)
+  // right now, same as /api/book/slots does, to see if it agrees with the
+  // raw refresh above or fails differently.
+  let viaAppCode: unknown;
+  try {
+    const calendar = await getValidAccessToken();
+    if (!calendar) {
+      viaAppCode = { result: "getValidAccessToken returned null" };
+    } else {
+      const now2 = new Date();
+      const timeMax = new Date(now2.getTime() + 30 * 86400000);
+      const busy = await getBusyBlocks(calendar.accessToken, calendar.calendarId, now2, timeMax);
+      viaAppCode = { result: "success", calendarId: calendar.calendarId, busyBlockCount: busy.length };
+    }
+  } catch (err) {
+    viaAppCode = { result: "threw", error: err instanceof Error ? err.message : String(err) };
+  }
+
   return NextResponse.json({
     step: "force_refresh",
     ok: res.ok,
@@ -63,5 +82,6 @@ export async function GET() {
     connectedAt: connection.connected_at,
     accessTokenExpiresAt: connection.access_token_expires_at,
     now: new Date().toISOString(),
+    viaAppCode,
   });
 }
