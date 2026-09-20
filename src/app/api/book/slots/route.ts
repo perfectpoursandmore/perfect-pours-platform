@@ -15,8 +15,12 @@ export async function GET() {
       slots: slots.map((s) => ({ start: s.start.toISOString(), end: s.end.toISOString() })),
     });
   } catch (err) {
+    // Log the real error server-side (Vercel logs) but never show visitors
+    // an internal error string -- a stray API/auth message on the public
+    // booking page reads as broken and erodes trust, even when it isn't.
+    console.error("Failed to load booking slots:", err);
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Could not load availability." },
+      { error: "We couldn't load available times right now. Please try again in a moment, or email faith@perfectpoursandmore.com to set up a time." },
       { status: 500 }
     );
   }

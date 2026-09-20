@@ -43,12 +43,25 @@ export async function loadAvailableSlots(now: Date = new Date()): Promise<{
     ((blockedRows ?? []) as { blocked_date: string }[]).map((r) => r.blocked_date)
   );
 
-  const calendar = await getValidAccessToken();
-
+  // Best-effort Google Calendar cross-check: a broken or revoked connection
+  // (expired refresh token, revoked consent, etc.) must never take down the
+  // public booking page — visitors should still see and book slots based on
+  // Faith's configured weekly hours, just without the extra conflict check
+  // against her personal calendar until she reconnects it. Same "never let
+  // calendar trouble block the core flow" pattern used when creating the
+  // consultation event in the booking route itself.
+  let calendar: { accessToken: string; calendarId: string } | null = null;
   let busyBlocks: Slot[] = [];
-  if (calendar) {
-    const timeMax = new Date(now.getTime() + (settings.maxAdvanceDays + 1) * 86400000);
-    busyBlocks = await getBusyBlocks(calendar.accessToken, calendar.calendarId, now, timeMax);
+  try {
+    calendar = await getValidAccessToken();
+    if (calendar) {
+      const timeMax = new Date(now.getTime() + (settings.maxAdvanceDays + 1) * 86400000);
+      busyBlocks = await getBusyBlocks(calendar.accessToken, calendar.calendarId, now, timeMax);
+    }
+  } catch (err) {
+    console.error("Google Calendar unavailable while loading slots (continuing without it):", err);
+    calendar = null;
+    busyBlocks = [];
   }
 
   const slots = getAvailableSlots({ settings, blockedDates, busyBlocks, now });
