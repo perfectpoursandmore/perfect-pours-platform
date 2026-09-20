@@ -15,14 +15,12 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    const { slots, settings, calendarConnected, calendarDebug } = await loadAvailableSlots();
+    const { slots, settings, calendarConnected } = await loadAvailableSlots();
 
     return NextResponse.json({
       timeZone: settings.timeZone,
       appointmentLengthMinutes: settings.appointmentLengthMinutes,
       calendarConnected,
-      // TEMPORARY diagnostic field -- remove once resolved.
-      calendarDebug,
       slots: slots.map((s) => ({ start: s.start.toISOString(), end: s.end.toISOString() })),
     });
   } catch (err) {

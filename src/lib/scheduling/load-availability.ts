@@ -12,7 +12,6 @@ export async function loadAvailableSlots(now: Date = new Date()): Promise<{
   slots: Slot[];
   settings: ConsultationSettings;
   calendarConnected: boolean;
-  calendarDebug?: string;
 }> {
   const supabase = createAdminClient();
 
@@ -51,26 +50,21 @@ export async function loadAvailableSlots(now: Date = new Date()): Promise<{
   // against her personal calendar until she reconnects it. Same "never let
   // calendar trouble block the core flow" pattern used when creating the
   // consultation event in the booking route itself.
-  let calendar: { accessToken: string; calendarId: string; debugInfo?: string } | null = null;
+  let calendar: { accessToken: string; calendarId: string } | null = null;
   let busyBlocks: Slot[] = [];
-  let calendarDebug: string | undefined;
   try {
     calendar = await getValidAccessToken();
     if (calendar) {
-      calendarDebug = calendar.debugInfo;
       const timeMax = new Date(now.getTime() + (settings.maxAdvanceDays + 1) * 86400000);
       busyBlocks = await getBusyBlocks(calendar.accessToken, calendar.calendarId, now, timeMax);
-    } else {
-      calendarDebug = "getValidAccessToken returned null (no refresh_token on file)";
     }
   } catch (err) {
     console.error("Google Calendar unavailable while loading slots (continuing without it):", err);
     calendar = null;
     busyBlocks = [];
-    calendarDebug = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
   }
 
   const slots = getAvailableSlots({ settings, blockedDates, busyBlocks, now });
 
-  return { slots, settings, calendarConnected: Boolean(calendar), calendarDebug };
+  return { slots, settings, calendarConnected: Boolean(calendar) };
 }
