@@ -51,8 +51,13 @@ export default async function StaffCalendarPage({
         .eq("status", "pending")
     : { count: 0 };
 
+  // Default to Agenda rather than Month: staff mostly check this on their
+  // phones, and a 7-column month grid has too little room per day to show
+  // a full event name there — Agenda lists only the days that actually
+  // have something on them, full names, no truncation. Month/Week are
+  // still one tap away for anyone who wants the grid view.
   const view: ViewMode =
-    searchParams.view === "week" || searchParams.view === "agenda" ? (searchParams.view as ViewMode) : "month";
+    searchParams.view === "week" || searchParams.view === "month" ? (searchParams.view as ViewMode) : "agenda";
 
   const today = todayDateString();
   const anchor = searchParams.date && /^\d{4}-\d{2}-\d{2}$/.test(searchParams.date) ? searchParams.date : today;
@@ -149,9 +154,9 @@ export default async function StaffCalendarPage({
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "1rem" }}>
         <div style={{ display: "flex", gap: "0.5rem" }}>
+          <ViewTab href={`/staff?view=agenda`} active={view === "agenda"} label="Agenda" />
           <ViewTab href={`/staff?view=month&date=${anchor}`} active={view === "month"} label="Month" />
           <ViewTab href={`/staff?view=week&date=${anchor}`} active={view === "week"} label="Week" />
-          <ViewTab href={`/staff?view=agenda`} active={view === "agenda"} label="Agenda" />
         </div>
 
         {view !== "agenda" && (
@@ -394,7 +399,7 @@ function Agenda({
   }
 
   return (
-    <div className="card" style={{ padding: 0 }}>
+    <div className="card" style={{ padding: 0, overflowX: "auto" }}>
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
         <thead>
           <tr style={{ textAlign: "left", borderBottom: "1px solid var(--color-border)" }}>
