@@ -111,17 +111,22 @@ export async function getValidAccessToken(): Promise<{
 
   // Refreshing has occasionally failed with a transient "invalid_grant" from
   // Google even while the same refresh_token succeeds moments later on a
-  // second try (confirmed by hand: an immediate retry with the identical
-  // token consistently works). Rather than let one flaky refresh mark the
-  // calendar "disconnected" for visitors until the next request happens to
-  // succeed, retry once after a short delay before giving up.
-  let refreshed;
-  try {
-    refreshed = await refreshAccessToken(connection.refresh_token);
-  } catch (firstErr) {
-    console.error("Google Calendar token refresh failed once, retrying:", firstErr);
-    await sleep(500);
-    refreshed = await refreshAccessToken(connection.refresh_token);
+  // retry. Try a few times with a short backoff before giving up.
+  let refreshed: TokenResponse | undefined;
+  const attemptErrors: string[] = [];
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      refreshed = await refreshAccessToken(connection.refresh_token);
+      break;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      attemptErrors.push(`attempt ${attempt}: ${msg}`);
+      console.error(`Google Calendar token refresh failed (attempt ${attempt}/3):`, err);
+      if (attempt < 3) await sleep(attempt * 500);
+    }
+  }
+  if (!refreshed) {
+    throw new Error(attemptErrors.join(" | "));
   }
 
   const newExpiresAt = new Date(Date.now() + refreshed.expires_in * 1000).toISOString();
