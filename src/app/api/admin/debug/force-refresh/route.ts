@@ -82,6 +82,8 @@ export async function GET() {
     connectedAt: connection.connected_at,
     accessTokenExpiresAt: connection.access_token_expires_at,
     now: new Date().toISOString(),
+    region: process.env.VERCEL_REGION ?? "unknown",
+    deploymentId: process.env.VERCEL_DEPLOYMENT_ID ?? "unknown",
     viaAppCode,
   });
 }
