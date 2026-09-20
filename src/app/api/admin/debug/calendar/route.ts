@@ -1,43 +1,46 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/roles";
+import { loadAvailableSlots } from "@/lib/scheduling/load-availability";
 import { getValidAccessToken, getBusyBlocks } from "@/lib/google-calendar";
 
-// TEMPORARY diagnostic route -- admin-only, no client details exposed
-// beyond what's needed to see why the calendar connection is failing.
-// Delete this file once the Google Calendar issue is resolved.
+// TEMPORARY diagnostic route -- admin-only. Delete once the Google
+// Calendar issue is resolved.
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   const user = await getCurrentUser();
   if (!user || user.role !== "admin") {
     return NextResponse.json({ error: "Not authorized." }, { status: 403 });
   }
 
+  // Step 1: call the exact same function /api/book/slots calls, but
+  // capture any error instead of swallowing it silently.
+  let viaLoadAvailableSlots: unknown;
+  try {
+    const result = await loadAvailableSlots();
+    viaLoadAvailableSlots = {
+      calendarConnected: result.calendarConnected,
+      slotCount: result.slots.length,
+    };
+  } catch (err) {
+    viaLoadAvailableSlots = { threw: err instanceof Error ? err.message : String(err) };
+  }
+
+  // Step 2: call the two Google functions directly, same as before.
+  let direct: unknown;
   try {
     const calendar = await getValidAccessToken();
     if (!calendar) {
-      return NextResponse.json({ step: "getValidAccessToken", result: "returned null (no refresh_token stored)" });
-    }
-
-    const now = new Date();
-    const timeMax = new Date(now.getTime() + 30 * 86400000);
-    try {
+      direct = { step: "getValidAccessToken", result: "returned null" };
+    } else {
+      const now = new Date();
+      const timeMax = new Date(now.getTime() + 30 * 86400000);
       const busy = await getBusyBlocks(calendar.accessToken, calendar.calendarId, now, timeMax);
-      return NextResponse.json({
-        step: "success",
-        calendarId: calendar.calendarId,
-        busyBlockCount: busy.length,
-        busyBlocks: busy.map((b) => ({ start: b.start.toISOString(), end: b.end.toISOString() })),
-      });
-    } catch (err) {
-      return NextResponse.json({
-        step: "getBusyBlocks",
-        calendarId: calendar.calendarId,
-        error: err instanceof Error ? err.message : String(err),
-      });
+      direct = { step: "success", calendarId: calendar.calendarId, busyBlockCount: busy.length };
     }
   } catch (err) {
-    return NextResponse.json({
-      step: "getValidAccessToken",
-      error: err instanceof Error ? err.message : String(err),
-    });
+    direct = { step: "threw", error: err instanceof Error ? err.message : String(err) };
   }
+
+  return NextResponse.json({ viaLoadAvailableSlots, direct, timestamp: new Date().toISOString() });
 }
