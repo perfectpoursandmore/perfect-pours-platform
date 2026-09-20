@@ -99,3 +99,28 @@ export async function convertLeadToClientAndEvent(formData: FormData) {
 
   redirect(`/admin/events/${eventId}`);
 }
+
+/**
+ * Deletes a lead that never turned into anything -- a test submission, a
+ * duplicate, spam through the public form. Refuses once it's been
+ * converted to a client/event record, since at that point it's the paper
+ * trail for a real relationship, not junk to clean up.
+ */
+export async function deleteLead(formData: FormData) {
+  await requireAdmin();
+  const supabase = createClient();
+
+  const id = String(formData.get("id"));
+
+  const { data: lead } = await supabase.from("leads").select("client_id, event_id").eq("id", id).single();
+
+  if (lead?.client_id || lead?.event_id) {
+    redirect(`/admin/leads/${id}?error=This lead has already been converted to a client, so it can't be deleted from here.`);
+  }
+
+  await supabase.from("leads").delete().eq("id", id);
+
+  revalidatePath("/admin/leads");
+  redirect("/admin/leads");
+}
+

@@ -1,7 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import { LEAD_STATUS_LABELS, LEAD_STATUS_ORDER, EVENT_TYPE_LABELS, formatDate, formatDateTime } from "@/lib/labels";
-import { updateLeadStatus, convertLeadToClientAndEvent } from "../actions";
+import { updateLeadStatus, convertLeadToClientAndEvent, deleteLead } from "../actions";
+import { DeleteLeadButton } from "../DeleteLeadButton";
 
 export default async function LeadDetailPage({
   params,
@@ -82,6 +83,21 @@ export default async function LeadDetailPage({
           </>
         )}
       </div>
+
+      {!lead.event_id && !lead.client_id && (
+        <div className="card">
+          <h2 style={{ marginTop: 0, fontSize: "1rem" }}>Delete this lead</h2>
+          <p style={{ color: "var(--color-muted)", fontSize: "0.9rem" }}>
+            For test submissions, duplicates, or spam that came through the public form --
+            not for a real inquiry you&apos;ve just decided not to pursue (use a status like
+            &quot;Lost / Did Not Book&quot; for that instead, so it stays in your records).
+          </p>
+          <form action={deleteLead}>
+            <input type="hidden" name="id" value={lead.id} />
+            <DeleteLeadButton leadName={`${lead.first_name} ${lead.last_name}`} />
+          </form>
+        </div>
+      )}
     </div>
   );
 }
