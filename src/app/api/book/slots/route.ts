@@ -15,16 +15,12 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    const { slots, settings, calendarConnected, calendarDebug } = await loadAvailableSlots();
+    const { slots, settings, calendarConnected } = await loadAvailableSlots();
 
     return NextResponse.json({
       timeZone: settings.timeZone,
       appointmentLengthMinutes: settings.appointmentLengthMinutes,
       calendarConnected,
-      // TEMPORARY: surfacing the raw calendar-connection error while we
-      // track down why this route disagrees with /api/admin/debug/calendar.
-      // Remove once resolved.
-      calendarDebug,
       slots: slots.map((s) => ({ start: s.start.toISOString(), end: s.end.toISOString() })),
     });
   } catch (err) {
