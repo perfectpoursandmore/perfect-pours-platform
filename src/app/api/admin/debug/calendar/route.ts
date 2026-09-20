@@ -21,6 +21,7 @@ export async function GET() {
     viaLoadAvailableSlots = {
       calendarConnected: result.calendarConnected,
       slotCount: result.slots.length,
+      calendarDebug: result.calendarDebug,
     };
   } catch (err) {
     viaLoadAvailableSlots = { threw: err instanceof Error ? err.message : String(err) };
@@ -36,7 +37,12 @@ export async function GET() {
       const now = new Date();
       const timeMax = new Date(now.getTime() + 30 * 86400000);
       const busy = await getBusyBlocks(calendar.accessToken, calendar.calendarId, now, timeMax);
-      direct = { step: "success", calendarId: calendar.calendarId, busyBlockCount: busy.length };
+      direct = {
+        step: "success",
+        calendarId: calendar.calendarId,
+        busyBlockCount: busy.length,
+        debugInfo: calendar.debugInfo,
+      };
     }
   } catch (err) {
     direct = { step: "threw", error: err instanceof Error ? err.message : String(err) };

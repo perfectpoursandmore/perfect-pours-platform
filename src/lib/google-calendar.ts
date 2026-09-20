@@ -85,16 +85,24 @@ async function refreshAccessToken(refreshToken: string): Promise<TokenResponse> 
 export async function getValidAccessToken(): Promise<{
   accessToken: string;
   calendarId: string;
+  debugInfo?: string;
 } | null> {
   const supabase = createAdminClient();
 
-  const { data: connection } = await supabase
+  const { data: connection, error: connError } = await supabase
     .from("calendar_connections")
-    .select("access_token, refresh_token, access_token_expires_at, google_calendar_id")
+    .select("access_token, refresh_token, access_token_expires_at, google_calendar_id, connected_at")
     .eq("id", true)
     .single();
 
-  if (!connection?.refresh_token) return null;
+  // TEMPORARY diagnostics -- safe partial fingerprints only, never full secrets.
+  const fp = (v: string | null | undefined) => (v ? `${v.slice(0, 6)}...${v.slice(-4)} (len ${v.length})` : "null");
+  const baseDebug = `queryError=${connError ? connError.message : "none"} refreshTokenFp=${fp(connection?.refresh_token)} accessTokenFp=${fp(connection?.access_token)} expiresAt=${connection?.access_token_expires_at ?? "null"} connectedAt=${connection?.connected_at ?? "null"} now=${new Date().toISOString()}`;
+
+  if (!connection?.refresh_token) {
+    console.error(`getValidAccessToken: NO_REFRESH_TOKEN ${baseDebug}`);
+    return null;
+  }
 
   const expiresAt = connection.access_token_expires_at
     ? new Date(connection.access_token_expires_at).getTime()
@@ -102,10 +110,20 @@ export async function getValidAccessToken(): Promise<{
   const stillValid = connection.access_token && expiresAt - Date.now() > 60_000; // 1 min margin
 
   if (stillValid) {
-    return { accessToken: connection.access_token, calendarId: connection.google_calendar_id };
+    return {
+      accessToken: connection.access_token,
+      calendarId: connection.google_calendar_id,
+      debugInfo: `CACHED_TOKEN ${baseDebug}`,
+    };
   }
 
-  const refreshed = await refreshAccessToken(connection.refresh_token);
+  let refreshed;
+  try {
+    refreshed = await refreshAccessToken(connection.refresh_token);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(`${msg} || ${baseDebug}`);
+  }
   const newExpiresAt = new Date(Date.now() + refreshed.expires_in * 1000).toISOString();
 
   await supabase
@@ -113,7 +131,11 @@ export async function getValidAccessToken(): Promise<{
     .update({ access_token: refreshed.access_token, access_token_expires_at: newExpiresAt })
     .eq("id", true);
 
-  return { accessToken: refreshed.access_token, calendarId: connection.google_calendar_id };
+  return {
+    accessToken: refreshed.access_token,
+    calendarId: connection.google_calendar_id,
+    debugInfo: `REFRESHED ${baseDebug}`,
+  };
 }
 
 export interface BusyBlock {
