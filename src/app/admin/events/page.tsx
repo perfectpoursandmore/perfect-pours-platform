@@ -21,7 +21,7 @@ export default async function EventsPage() {
             className="button"
             style={{ background: "none", border: "1px solid var(--color-border)", color: "inherit" }}
           >
-            Import times from spreadsheet
+            Import times &amp; staff from spreadsheet
           </a>
           <a href="/admin/events/new" className="button">
             + Add booking

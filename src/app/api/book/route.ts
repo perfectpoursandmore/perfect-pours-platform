@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createConsultationEvent, getValidAccessToken } from "@/lib/google-calendar";
 import { loadAvailableSlots } from "@/lib/scheduling/load-availability";
-import { isEmailConfigured, sendTemplatedEmail } from "@/lib/email";
+import { isEmailConfigured, sendEmail, sendTemplatedEmail } from "@/lib/email";
 import { formatDateTime, EVENT_TYPE_LABELS } from "@/lib/labels";
 
 const EVENT_TYPES: readonly string[] = [
@@ -172,6 +172,37 @@ export async function POST(request: Request) {
       }
     } catch (err) {
       console.error("Failed to send consultation confirmation email:", err);
+    }
+  }
+
+  // Best-effort notification to Faith so a new booking never sits
+  // undiscovered in /admin/leads. Uses the low-level sendEmail() helper
+  // directly (no email_templates row needed) and never blocks or fails
+  // the booking response.
+  if (isEmailConfigured()) {
+    try {
+      const notifyTo = process.env.ADMIN_NOTIFICATION_EMAIL || "faith@perfectpoursandmore.com";
+      await sendEmail({
+        to: notifyTo,
+        subject: `New consultation booked: ${firstName} ${lastName} (${EVENT_TYPE_LABELS[eventType] ?? eventType})`,
+        html: `<p>A new consultation was just booked through the website.</p>
+<ul>
+<li><strong>Name:</strong> ${firstName} ${lastName}</li>
+<li><strong>Email:</strong> ${email}</li>
+<li><strong>Phone:</strong> ${phone}</li>
+<li><strong>Event type:</strong> ${EVENT_TYPE_LABELS[eventType] ?? eventType}</li>
+<li><strong>Event date:</strong> ${eventDate}</li>
+<li><strong>Venue/address:</strong> ${venueOrAddress}</li>
+<li><strong>Guest count:</strong> ${guestCountNum ?? "—"}</li>
+<li><strong>How they heard about us:</strong> ${howHeard || "—"}</li>
+<li><strong>Consultation time:</strong> ${formatDateTime(chosenSlot.start.toISOString())}</li>
+</ul>
+<p><a href="https://perfect-pours-platform.vercel.app/admin/leads">View in the leads dashboard</a></p>`,
+      });
+    } catch (err) {
+      // Don't fail the booking over a notification hiccup — Faith can
+      // still find the lead in /admin/leads or her calendar.
+      console.error("Failed to send new-lead notification email:", err);
     }
   }
 

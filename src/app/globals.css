@@ -68,3 +68,76 @@ label {
   color: var(--color-muted);
   margin-bottom: 0.3rem;
 }
+
+.role-shell {
+  min-height: 100vh;
+  display: flex;
+}
+
+.role-shell-aside {
+  width: 220px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--color-border);
+  padding: 1.25rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.role-shell-nav {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.role-shell-main {
+  flex: 1;
+  min-width: 0;
+  padding: 2rem;
+}
+
+@media (max-width: 720px) {
+  .role-shell {
+    flex-direction: column;
+  }
+
+  .role-shell-aside {
+    width: 100%;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    border-right: none;
+    border-bottom: 1px solid var(--color-border);
+    padding: 0.85rem 1rem;
+    gap: 0.75rem;
+  }
+
+  .role-shell-nav {
+    grid-auto-flow: column;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem 1rem;
+  }
+
+  .role-shell-signout {
+    margin-top: 0 !important;
+  }
+
+  .role-shell-main {
+    padding: 1rem;
+  }
+}
+
+/* Calendar grids (staff + admin): without minmax(0, 1fr), grid tracks
+   default to a minimum width based on their content's unwrapped size —
+   a long event name forces its day cell wider than its 1/7 share, which
+   pushes the whole grid past the viewport instead of letting the
+   ellipsis/overflow styling on the event chip do its job. That's what
+   was cutting the calendar off on narrow screens. */
+.calendar-grid {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.calendar-grid > * {
+  min-width: 0;
+}

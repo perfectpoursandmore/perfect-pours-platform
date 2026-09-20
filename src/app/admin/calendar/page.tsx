@@ -209,7 +209,7 @@ function MonthGrid({
 
   return (
     <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", borderBottom: "1px solid var(--color-border)" }}>
+      <div className="calendar-grid" style={{ display: "grid", borderBottom: "1px solid var(--color-border)" }}>
         {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
           <div key={d} style={{ padding: "0.5rem", fontSize: "0.8rem", color: "var(--color-muted)", textAlign: "center" }}>
             {d}
@@ -217,7 +217,7 @@ function MonthGrid({
         ))}
       </div>
       {weeks.map((week, i) => (
-        <div key={i} style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)" }}>
+        <div key={i} className="calendar-grid" style={{ display: "grid" }}>
           {week.map((dateStr) => {
             const dayNum = Number(dateStr.split("-")[2]);
             const inMonth = Number(dateStr.split("-")[1]) === currentMonth;
@@ -268,7 +268,7 @@ function WeekGrid({
 }) {
   return (
     <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)" }}>
+      <div className="calendar-grid" style={{ display: "grid" }}>
         {gridDates.map((dateStr) => {
           const [, monthNum, dayNum] = dateStr.split("-").map(Number);
           const dayEvents = eventsByDate.get(dateStr) ?? [];
