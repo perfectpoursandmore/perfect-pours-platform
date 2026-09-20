@@ -23,6 +23,18 @@ const EVENT_TYPES: { value: string; label: string }[] = [
   { value: "other", label: "Other" },
 ];
 
+const HOW_HEARD_OPTIONS: string[] = [
+  "Friend/Family",
+  "Saw us at an event",
+  "Google",
+  "Instagram",
+  "Facebook",
+  "TikTok",
+  "The Knot / WeddingWire",
+  "Referred by another vendor (venue, planner, etc.)",
+  "Other",
+];
+
 function formatDateHeading(iso: string, timeZone: string) {
   return new Intl.DateTimeFormat("en-US", {
     timeZone,
@@ -56,7 +68,10 @@ export function BookingFlow() {
     phone: "",
     eventType: "",
     eventDate: "",
-    venueOrAddress: "",
+    addressLine: "",
+    city: "",
+    state: "",
+    zip: "",
     guestCount: "",
     howHeard: "",
   });
@@ -287,13 +302,44 @@ export function BookingFlow() {
       </div>
 
       <div>
-        <label htmlFor="venueOrAddress">Event address or venue</label>
+        <label htmlFor="addressLine">Event street address</label>
         <input
-          id="venueOrAddress"
+          id="addressLine"
           required
-          value={form.venueOrAddress}
-          onChange={(e) => setForm({ ...form, venueOrAddress: e.target.value })}
+          placeholder="123 Main St"
+          value={form.addressLine}
+          onChange={(e) => setForm({ ...form, addressLine: e.target.value })}
         />
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: "1rem" }}>
+        <div>
+          <label htmlFor="city">City</label>
+          <input
+            id="city"
+            required
+            value={form.city}
+            onChange={(e) => setForm({ ...form, city: e.target.value })}
+          />
+        </div>
+        <div>
+          <label htmlFor="state">State</label>
+          <input
+            id="state"
+            required
+            value={form.state}
+            onChange={(e) => setForm({ ...form, state: e.target.value })}
+          />
+        </div>
+        <div>
+          <label htmlFor="zip">ZIP</label>
+          <input
+            id="zip"
+            required
+            value={form.zip}
+            onChange={(e) => setForm({ ...form, zip: e.target.value })}
+          />
+        </div>
       </div>
 
       <div>
@@ -309,11 +355,19 @@ export function BookingFlow() {
 
       <div>
         <label htmlFor="howHeard">How did you hear about us?</label>
-        <input
+        <select
           id="howHeard"
           value={form.howHeard}
           onChange={(e) => setForm({ ...form, howHeard: e.target.value })}
-        />
+          style={{ width: "100%", padding: "0.55rem 0.7rem", borderRadius: 8, border: "1px solid var(--color-border)" }}
+        >
+          <option value="">— Select one —</option>
+          {HOW_HEARD_OPTIONS.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
       </div>
 
       <button type="submit" className="button" disabled={submitting}>

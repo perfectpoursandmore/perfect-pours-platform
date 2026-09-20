@@ -37,12 +37,18 @@ export async function POST(request: Request) {
     phone,
     eventType,
     eventDate,
-    venueOrAddress,
+    addressLine,
+    city,
+    state,
+    zip,
     guestCount,
     howHeard,
   } = body;
 
-  // Required-field validation — mirrors the intake form in the PRD.
+  // Required-field validation — mirrors the intake form in the PRD. The
+  // address is split into pieces (rather than one free-text line) so a
+  // vague answer like just a neighborhood name can't slip through — every
+  // piece has to actually be filled in.
   if (
     !isNonEmptyString(slotStart) ||
     !isNonEmptyString(firstName) ||
@@ -51,7 +57,10 @@ export async function POST(request: Request) {
     !isNonEmptyString(phone) ||
     !isNonEmptyString(eventType) ||
     !isNonEmptyString(eventDate) ||
-    !isNonEmptyString(venueOrAddress)
+    !isNonEmptyString(addressLine) ||
+    !isNonEmptyString(city) ||
+    !isNonEmptyString(state) ||
+    !isNonEmptyString(zip)
   ) {
     return NextResponse.json({ error: "Please fill in every required field." }, { status: 400 });
   }
@@ -128,7 +137,10 @@ export async function POST(request: Request) {
       phone,
       event_type: eventType,
       event_date: eventDate,
-      venue_or_address: venueOrAddress,
+      address_line: addressLine,
+      city,
+      state,
+      zip,
       guest_count: guestCountNum,
       how_heard: howHeard ?? null,
       consultation_at: chosenSlot.start.toISOString(),
@@ -192,7 +204,7 @@ export async function POST(request: Request) {
 <li><strong>Phone:</strong> ${phone}</li>
 <li><strong>Event type:</strong> ${EVENT_TYPE_LABELS[eventType] ?? eventType}</li>
 <li><strong>Event date:</strong> ${eventDate}</li>
-<li><strong>Venue/address:</strong> ${venueOrAddress}</li>
+<li><strong>Address:</strong> ${addressLine}, ${city}, ${state} ${zip}</li>
 <li><strong>Guest count:</strong> ${guestCountNum ?? "—"}</li>
 <li><strong>How they heard about us:</strong> ${howHeard || "—"}</li>
 <li><strong>Consultation time:</strong> ${formatDateTime(chosenSlot.start.toISOString())}</li>

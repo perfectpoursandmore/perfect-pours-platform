@@ -34,7 +34,14 @@ export default async function LeadDetailPage({
         <Row label="Phone" value={lead.phone} />
         <Row label="Event type" value={EVENT_TYPE_LABELS[lead.event_type] ?? lead.event_type} />
         <Row label="Event date" value={formatDate(lead.event_date)} />
-        <Row label="Venue / address" value={lead.venue_or_address ?? "—"} />
+        <Row
+          label="Venue / address"
+          value={
+            [lead.address_line, lead.city, lead.state, lead.zip].filter(Boolean).join(", ") ||
+            lead.venue_or_address ||
+            "—"
+          }
+        />
         <Row label="Guest count" value={lead.guest_count ? String(lead.guest_count) : "—"} />
         <Row label="How they heard about us" value={lead.how_heard ?? "—"} />
         <Row label="Consultation" value={formatDateTime(lead.consultation_at)} />

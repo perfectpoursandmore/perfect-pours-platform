@@ -77,7 +77,13 @@ export async function convertLeadToClientAndEvent(formData: FormData) {
         name: `${lead.last_name} ${eventTypeLabel}`,
         event_type: lead.event_type,
         event_date: lead.event_date,
-        address_line: lead.venue_or_address,
+        // Structured fields on newer leads; venue_or_address is the old
+        // single-line fallback for leads booked before the address form
+        // was split into address/city/state/zip.
+        address_line: lead.address_line ?? lead.venue_or_address,
+        city: lead.city,
+        state: lead.state,
+        zip: lead.zip,
         guest_count: lead.guest_count,
         status: "inquiry",
       })
