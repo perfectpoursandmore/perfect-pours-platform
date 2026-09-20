@@ -28,7 +28,7 @@ export default async function StaffEventDetailPage({ params }: { params: { id: s
   const { data: event } = await supabase
     .from("events")
     .select(
-      "id, name, event_type, event_date, venue_name, address_line, city, state, guest_count, staff_arrival_time, guest_arrival_time, staff_end_time, staff_instructions, serveware_type, status"
+      "id, name, event_type, event_date, venue_name, address_line, city, state, guest_count, staff_arrival_time, guest_arrival_time, staff_end_time, staff_instructions, status"
     )
     .eq("id", params.id)
     .single();
@@ -65,12 +65,6 @@ export default async function StaffEventDetailPage({ params }: { params: { id: s
           <Field label="Staff arrival" value={formatDateTime(event.staff_arrival_time)} />
           <Field label="Guest arrival" value={formatDateTime(event.guest_arrival_time)} />
           <Field label="Staff end time" value={formatDateTime(event.staff_end_time)} />
-          <Field
-            label="Glassware/Disposable"
-            value={
-              event.serveware_type === "glassware" ? "Glassware" : event.serveware_type === "disposable" ? "Disposable" : "—"
-            }
-          />
         </div>
 
         {event.staff_instructions && <Field label="Notes for staff" value={event.staff_instructions} />}
@@ -89,7 +83,7 @@ export default async function StaffEventDetailPage({ params }: { params: { id: s
                 <li key={row.id} style={{ fontSize: "0.9rem" }}>
                   <span style={{ textTransform: "capitalize" }}>{row.role}</span>:{" "}
                   {row.is_open && !row.staff_id ? (
-                    <span style={{ color: "var(--color-accent)" }}>Open — let Faith know if you can cover it</span>
+                    <span style={{ color: "var(--color-muted)" }}>Open</span>
                   ) : person ? (
                     <span style={{ fontWeight: isMe ? 700 : 400 }}>
                       {person.first_name} {person.last_name}

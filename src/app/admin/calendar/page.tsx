@@ -10,24 +10,12 @@ import {
   weekDates,
   weekLabel,
 } from "@/lib/calendar-dates";
+import type { CalendarEvent } from "./types";
+import { clientName } from "./types";
+import { EventChip, EventNameLink } from "./EventChip";
+import { EventQuickView } from "./EventQuickView";
 
 type ViewMode = "month" | "week" | "agenda";
-
-type CalendarEvent = {
-  id: string;
-  name: string;
-  event_type: string;
-  event_date: string;
-  venue_name: string | null;
-  city: string | null;
-  status: string;
-  clients: { first_name: string; last_name: string } | { first_name: string; last_name: string }[] | null;
-};
-
-function clientName(event: CalendarEvent): string | null {
-  const client = Array.isArray(event.clients) ? event.clients[0] : event.clients;
-  return client ? `${client.first_name} ${client.last_name}` : null;
-}
 
 export default async function AdminCalendarPage({
   searchParams,
@@ -99,9 +87,11 @@ export default async function AdminCalendarPage({
 
   return (
     <div style={{ display: "grid", gap: "1.5rem" }}>
+      <EventQuickView />
+
       <div>
         <h1 style={{ margin: 0 }}>Calendar</h1>
-        <p style={{ color: "var(--color-muted)" }}>Every booked event — click one to open its full record.</p>
+        <p style={{ color: "var(--color-muted)" }}>Every booked event — click one for a quick view, or open its full record from there.</p>
       </div>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "1rem" }}>
@@ -168,32 +158,6 @@ const navButtonStyle: React.CSSProperties = {
   textDecoration: "none",
   color: "inherit",
 };
-
-function EventChip({ event }: { event: CalendarEvent }) {
-  const client = clientName(event);
-  const cancelled = event.status === "cancelled";
-  return (
-    <a
-      href={`/admin/events/${event.id}`}
-      style={{
-        display: "block",
-        fontSize: "0.78rem",
-        padding: "0.15rem 0.35rem",
-        borderRadius: 4,
-        marginBottom: 2,
-        textDecoration: cancelled ? "line-through" : "none",
-        color: cancelled ? "var(--color-muted)" : "inherit",
-        background: cancelled ? "transparent" : "var(--color-highlight, #f1e9dd)",
-        whiteSpace: "nowrap",
-        overflow: "hidden",
-        textOverflow: "ellipsis",
-      }}
-      title={`${event.name}${client ? ` — ${client}` : ""}`}
-    >
-      {event.name}
-    </a>
-  );
-}
 
 function MonthGrid({
   gridDates,
@@ -323,7 +287,7 @@ function Agenda({ events }: { events: CalendarEvent[] }) {
             <tr key={event.id} style={{ borderBottom: "1px solid var(--color-border)" }}>
               <td style={{ padding: "0.75rem 1rem", whiteSpace: "nowrap" }}>{formatDate(event.event_date)}</td>
               <td style={{ padding: "0.75rem 1rem" }}>
-                <a href={`/admin/events/${event.id}`}>{event.name}</a>{" "}
+                <EventNameLink event={event} />{" "}
                 <span style={{ color: "var(--color-muted)", fontSize: "0.85rem" }}>
                   ({EVENT_TYPE_LABELS[event.event_type] ?? event.event_type})
                 </span>

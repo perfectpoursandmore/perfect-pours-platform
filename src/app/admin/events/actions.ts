@@ -50,7 +50,6 @@ export async function updateEventOverview(formData: FormData) {
       staff_arrival_time: staffArrivalTime,
       guest_arrival_time: guestArrivalTime,
       staff_end_time: staffEndTime,
-      serveware_type: nullIfEmpty(formData.get("servewareType")),
       staff_instructions: nullIfEmpty(formData.get("staffInstructions")),
     })
     .eq("id", id);

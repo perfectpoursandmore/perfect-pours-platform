@@ -196,19 +196,6 @@ export default async function EventOverviewPage({
       </div>
 
       <div>
-        <label htmlFor="servewareType">Glassware or disposable</label>
-        <select
-          id="servewareType"
-          name="servewareType"
-          defaultValue={event.serveware_type ?? ""}
-          style={{ width: "100%", padding: "0.55rem 0.7rem", borderRadius: 8, border: "1px solid var(--color-border)" }}
-        >
-          <option value="">Not set</option>
-          <option value="glassware">Glassware</option>
-          <option value="disposable">Disposable</option>
-        </select>
-      </div>
-      <div>
         <label htmlFor="staffInstructions">Operational notes for staff</label>
         <textarea
           id="staffInstructions"
