@@ -170,7 +170,7 @@ export function BookingFlow() {
     return (
       <div style={{ display: "grid", gap: "1.5rem", maxWidth: 640 }}>
         <p style={{ color: "var(--color-muted)" }}>
-          Times shown are Eastern Time. Pick a day, then a time.
+          Times shown are Eastern Time.
         </p>
         {dateGroups.map(([date, slots]) => (
           <div key={date}>
