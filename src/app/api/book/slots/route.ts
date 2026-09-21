@@ -15,12 +15,13 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    const { slots, settings, calendarConnected } = await loadAvailableSlots();
+    const { slots, settings, calendarConnected, calendarDebug } = await loadAvailableSlots();
 
     return NextResponse.json({
       timeZone: settings.timeZone,
       appointmentLengthMinutes: settings.appointmentLengthMinutes,
       calendarConnected,
+      calendarDebug,
       slots: slots.map((s) => ({ start: s.start.toISOString(), end: s.end.toISOString() })),
     });
   } catch (err) {
