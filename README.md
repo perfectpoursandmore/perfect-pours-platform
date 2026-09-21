@@ -119,15 +119,21 @@ full 10-phase core roadmap from the original plan.
 
 ## What's not built yet
 
-Global search (explicitly called out in the original spec as important) is
-the one core-roadmap item left. QuickBooks payment status is pulled by
-clicking **Refresh payment status** rather than pushed automatically —
-real-time webhooks need a public HTTPS URL, which only exists once this
-app is deployed (see the QuickBooks setup section above). Beyond the core
-roadmap, the "Later" bucket — cocktail selection, an alcohol inventory
-calculator, rental inventory, expense tracking, bank/card transaction
-import, and deeper reporting — hasn't been started; the database schema
-for those hasn't been designed yet either.
+The full 10-phase core roadmap is now complete, including **global
+search** (`/api/admin/search`, the box at the top of every admin page) —
+matches clients, leads, and events by name, email, phone, venue, or
+event type, and finding a client also surfaces their events even when
+the event's own name doesn't mention them.
+
+QuickBooks payment status is pulled by clicking **Refresh payment
+status** rather than pushed automatically — real-time webhooks need a
+public HTTPS URL, which now exists since the app is deployed, so this is
+doable whenever it's worth doing (see the QuickBooks setup section
+above). Beyond the core roadmap, the "Later" bucket — cocktail
+selection, an alcohol inventory calculator, rental inventory, expense
+tracking, bank/card transaction import, and deeper reporting — hasn't
+been started; the database schema for those hasn't been designed yet
+either.
 
 ## One-time setup (you only do this once)
 
@@ -289,9 +295,11 @@ src/
     api/book/                  slots lookup + booking submission (public)
     api/google/                Google OAuth connect/callback (admin-only)
     api/quickbooks/            QuickBooks OAuth connect/callback (admin-only)
+    api/admin/search/          global search across clients/leads/events (admin-only)
   components/
     BookingFlow.tsx             the interactive date/time picker + intake form
     SignaturePad.tsx            canvas-based e-signature capture
+    GlobalSearch.tsx            search box + results dropdown, top of every admin page
   lib/
     supabase/                  Supabase client helpers (browser/server/admin)
     auth/                       role-lookup helper used by every server page
