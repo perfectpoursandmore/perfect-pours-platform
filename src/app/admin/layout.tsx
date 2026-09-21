@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/server";
 import { RoleShell } from "@/components/RoleShell";
+import { GlobalSearch } from "@/components/GlobalSearch";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser();
@@ -42,6 +43,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         { label: "Settings", href: "/admin/settings" },
       ]}
     >
+      <GlobalSearch />
       {qboNeedsReconnect && (
         <a
           href="/admin/settings/quickbooks"
