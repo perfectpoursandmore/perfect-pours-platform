@@ -126,7 +126,8 @@ export async function getValidAccessToken(): Promise<{
     }
   }
   if (!refreshed) {
-    throw new Error(attemptErrors.join(" | "));
+    const cid = process.env.GOOGLE_CALENDAR_CLIENT_ID ?? "MISSING";
+    throw new Error(`clientIdInUse=${cid.slice(0, 12)}...${cid.slice(-16)} | ${attemptErrors.join(" | ")}`);
   }
 
   const newExpiresAt = new Date(Date.now() + refreshed.expires_in * 1000).toISOString();
