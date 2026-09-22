@@ -42,3 +42,48 @@ export async function removeDashboardNote(formData: FormData) {
 
   revalidatePath("/admin");
 }
+
+/**
+ * Adds an item to either the Daily or Weekly to-do list (list_type tells
+ * them apart). Both lists work the same way -- nothing here auto-resets or
+ * expires; Faith checks items off and removes them herself, same as the
+ * dashboard notes above.
+ */
+export async function addTodo(formData: FormData) {
+  await requireAdmin();
+  const supabase = createClient();
+  const listType = String(formData.get("listType") ?? "");
+  const item = String(formData.get("item") ?? "").trim();
+  if (!item || (listType !== "daily" && listType !== "weekly")) return;
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  await supabase.from("todos").insert({ list_type: listType, item, created_by: user?.id ?? null });
+
+  revalidatePath("/admin");
+}
+
+/** Checks (or unchecks) one to-do item -- the button submits the state it should flip to. */
+export async function toggleTodo(formData: FormData) {
+  await requireAdmin();
+  const supabase = createClient();
+  const id = String(formData.get("id"));
+  const done = String(formData.get("done")) === "true";
+
+  await supabase.from("todos").update({ is_done: done }).eq("id", id);
+
+  revalidatePath("/admin");
+}
+
+/** Removes a to-do item for good -- once it's done and out of mind, or it was added by mistake. */
+export async function removeTodo(formData: FormData) {
+  await requireAdmin();
+  const supabase = createClient();
+  const id = String(formData.get("id"));
+
+  await supabase.from("todos").delete().eq("id", id);
+
+  revalidatePath("/admin");
+}
