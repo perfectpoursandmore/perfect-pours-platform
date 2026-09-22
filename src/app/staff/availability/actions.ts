@@ -78,3 +78,58 @@ export async function respondToAvailability(formData: FormData) {
   revalidatePath("/staff/availability");
   revalidatePath("/staff");
 }
+
+/**
+ * A staff member answering "am I free on this whole day" -- the day-level
+ * counterpart to respondToAvailability above (staff_date_availability,
+ * migration 0014, instead of event_staff_invites). Same select().single()
+ * check so an RLS-filtered no-op surfaces as a visible error instead of
+ * silently doing nothing.
+ */
+export async function respondToDayAvailability(formData: FormData) {
+  const user = await getCurrentUser();
+  if (!user || user.role !== "staff") redirect("/login");
+
+  const id = String(formData.get("id"));
+  const status = String(formData.get("status"));
+  if (status !== "available" && status !== "unavailable") return;
+
+  const supabase = createClient();
+  const { data: updated, error } = await supabase
+    .from("staff_date_availability")
+    .update({ status, responded_at: new Date().toISOString() })
+    .eq("id", id)
+    .select("id, date, staff:staff_id(first_name, last_name)")
+    .single();
+
+  if (error || !updated) {
+    redirect(
+      "/staff/availability?error=" +
+        encodeURIComponent("That didn't go through — try again, or text Faith if it keeps happening.")
+    );
+  }
+
+  // Same best-effort admin notification as the per-event response above.
+  if (isEmailConfigured()) {
+    try {
+      const person = Array.isArray(updated!.staff) ? updated!.staff[0] : updated!.staff;
+      const notifyTo = process.env.ADMIN_NOTIFICATION_EMAIL || "faith@perfectpoursandmore.com";
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
+      await sendEmail({
+        to: notifyTo,
+        subject: `${person ? `${person.first_name} ${person.last_name}` : "A staff member"} ${
+          status === "available" ? "is available" : "is NOT available"
+        } — ${formatDate(updated!.date)}`,
+        html: `<p>${person ? `${person.first_name} ${person.last_name}` : "A staff member"} just answered a day availability request for <strong>${formatDate(
+          updated!.date
+        )}</strong>: <strong>${status === "available" ? "Yes, available" : "Not available"}</strong>.</p>
+<p><a href="${appUrl}/admin/staff/availability?date=${updated!.date}">View that day's availability</a></p>`,
+      });
+    } catch (err) {
+      console.error("Failed to send day-availability-response notification to Faith:", err);
+    }
+  }
+
+  revalidatePath("/staff/availability");
+  revalidatePath("/staff");
+}
