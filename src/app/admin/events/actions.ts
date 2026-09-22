@@ -4,8 +4,8 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/roles";
-import { isEmailConfigured, sendTemplatedEmail } from "@/lib/email";
-import { formatDate } from "@/lib/labels";
+import { isEmailConfigured, sendEmail, sendTemplatedEmail } from "@/lib/email";
+import { formatDate, formatDateTime } from "@/lib/labels";
 import { zonedTimeToIso } from "@/lib/calendar-dates";
 
 async function requireAdmin() {
@@ -414,4 +414,68 @@ export async function deleteEvent(formData: FormData) {
   revalidatePath("/admin/payouts");
   revalidatePath("/staff");
   redirect("/admin/events");
+}
+
+/**
+ * Emails everyone currently assigned to this event (not open slots) a
+ * summary of its staff arrival / guest arrival / staff end time — for when
+ * a client moves the time and Faith needs everyone to know the new one.
+ * Deliberately a separate, explicit action from updateEventOverview above
+ * rather than auto-sending on every save: Faith asked for a button she
+ * clicks on purpose, not an email firing on every small edit.
+ */
+export async function notifyStaffOfEventTime(formData: FormData) {
+  await requireAdmin();
+  const supabase = createClient();
+  const eventId = String(formData.get("eventId"));
+
+  const { data: event } = await supabase
+    .from("events")
+    .select("name, event_date, staff_arrival_time, guest_arrival_time, staff_end_time")
+    .eq("id", eventId)
+    .single();
+
+  if (!event) {
+    redirect(`/admin/events/${eventId}`);
+  }
+
+  const { data: assignments } = await supabase
+    .from("event_staff")
+    .select("staff_id, staff:staff_id(first_name, last_name, staff_details(email))")
+    .eq("event_id", eventId)
+    .eq("is_open", false)
+    .not("staff_id", "is", null);
+
+  let notified = 0;
+
+  if (isEmailConfigured()) {
+    for (const row of assignments ?? []) {
+      const person = Array.isArray(row.staff) ? row.staff[0] : row.staff;
+      if (!person) continue;
+      const details = Array.isArray(person.staff_details) ? person.staff_details[0] : person.staff_details;
+      const email = details?.email;
+      if (!email) continue;
+
+      try {
+        await sendEmail({
+          to: email,
+          subject: `Updated time — ${event!.name} (${formatDate(event!.event_date)})`,
+          html: `<p>Hi ${person.first_name},</p>
+<p>The time for <strong>${event!.name}</strong> on ${formatDate(event!.event_date)} has been updated:</p>
+<ul>
+<li><strong>Staff arrival:</strong> ${formatDateTime(event!.staff_arrival_time)}</li>
+<li><strong>Guest arrival:</strong> ${formatDateTime(event!.guest_arrival_time)}</li>
+<li><strong>Staff end time:</strong> ${formatDateTime(event!.staff_end_time)}</li>
+</ul>
+<p>Please make a note of it so there's no confusion about when to show up.</p>`,
+        });
+        notified += 1;
+      } catch (err) {
+        console.error("Failed to send time-change notification to staff:", err);
+      }
+    }
+  }
+
+  revalidatePath(`/admin/events/${eventId}`);
+  redirect(`/admin/events/${eventId}?notified=${notified}`);
 }

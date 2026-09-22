@@ -1,7 +1,13 @@
 import { createClient } from "@/lib/supabase/server";
 import { EVENT_STATUS_LABELS } from "@/lib/labels";
 import { timeOfDayInZone } from "@/lib/calendar-dates";
-import { updateEventOverview, reassignEventClient, createClientAndAssignToEvent, deleteEvent } from "../actions";
+import {
+  updateEventOverview,
+  reassignEventClient,
+  createClientAndAssignToEvent,
+  deleteEvent,
+  notifyStaffOfEventTime,
+} from "../actions";
 import { DeleteEventButton } from "../DeleteEventButton";
 
 export default async function EventOverviewPage({
@@ -9,7 +15,7 @@ export default async function EventOverviewPage({
   searchParams,
 }: {
   params: { id: string };
-  searchParams: { error?: string };
+  searchParams: { error?: string; notified?: string };
 }) {
   const supabase = createClient();
   const { data: event } = await supabase.from("events").select("*").eq("id", params.id).single();
@@ -21,9 +27,32 @@ export default async function EventOverviewPage({
     .select("id, first_name, last_name, email")
     .order("first_name");
 
+  const { data: assignedStaff } = await supabase
+    .from("event_staff")
+    .select("staff_id, staff:staff_id(first_name, last_name, staff_details(email))")
+    .eq("event_id", event.id)
+    .eq("is_open", false)
+    .not("staff_id", "is", null);
+
+  const notifiable = (assignedStaff ?? [])
+    .map((row) => {
+      const person = Array.isArray(row.staff) ? row.staff[0] : row.staff;
+      if (!person) return null;
+      const details = Array.isArray(person.staff_details) ? person.staff_details[0] : person.staff_details;
+      return { name: `${person.first_name} ${person.last_name}`, email: details?.email ?? null };
+    })
+    .filter((p): p is { name: string; email: string | null } => p !== null);
+
   return (
     <>
       {searchParams.error && <p style={{ color: "#a33" }}>{searchParams.error}</p>}
+      {searchParams.notified !== undefined && (
+        <p style={{ color: "#2a7a2a" }}>
+          {Number(searchParams.notified) > 0
+            ? `Notified ${searchParams.notified} staff member${Number(searchParams.notified) === 1 ? "" : "s"} of the current time.`
+            : "No one with an email on file was assigned to notify."}
+        </p>
+      )}
 
       <div className="card" style={{ display: "grid", gap: "1rem" }}>
         <h2 style={{ marginTop: 0, fontSize: "1rem" }}>Client for this event</h2>
@@ -217,6 +246,29 @@ export default async function EventOverviewPage({
         Save
       </button>
     </form>
+
+      <div className="card" style={{ display: "grid", gap: "0.75rem" }}>
+        <h2 style={{ marginTop: 0, fontSize: "1rem" }}>Notify staff of this event&apos;s time</h2>
+        <p style={{ margin: 0, color: "var(--color-muted)", fontSize: "0.9rem" }}>
+          Save any time changes above first — this emails whoever&apos;s currently assigned the
+          arrival/end times shown on this page right now, so no one shows up early or late.
+        </p>
+        {notifiable.length > 0 ? (
+          <p style={{ margin: 0, fontSize: "0.9rem" }}>
+            Will notify: {notifiable.map((p) => (p.email ? p.name : `${p.name} (no email on file)`)).join(", ")}
+          </p>
+        ) : (
+          <p style={{ margin: 0, color: "var(--color-muted)", fontSize: "0.9rem" }}>
+            No one&apos;s assigned to this event yet — assign staff on the Staff tab first.
+          </p>
+        )}
+        <form action={notifyStaffOfEventTime}>
+          <input type="hidden" name="eventId" value={event.id} />
+          <button type="submit" className="button" disabled={notifiable.length === 0}>
+            Notify staff
+          </button>
+        </form>
+      </div>
 
       <div className="card" style={{ display: "grid", gap: "0.75rem", borderColor: "#a33" }}>
         <h2 style={{ marginTop: 0, fontSize: "1rem", color: "#a33" }}>Delete event</h2>

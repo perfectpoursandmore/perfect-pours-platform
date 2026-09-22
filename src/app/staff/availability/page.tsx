@@ -21,7 +21,11 @@ type InviteRow = {
   event: EventShape | EventShape[] | null;
 };
 
-export default async function StaffAvailabilityPage() {
+export default async function StaffAvailabilityPage({
+  searchParams,
+}: {
+  searchParams: { error?: string };
+}) {
   const supabase = createClient();
   const user = await getCurrentUser();
 
@@ -45,6 +49,8 @@ export default async function StaffAvailabilityPage() {
 
   return (
     <div style={{ display: "grid", gap: "1.5rem" }}>
+      {searchParams.error && <p style={{ color: "#a33", margin: 0 }}>{searchParams.error}</p>}
+
       <div>
         <h1 style={{ margin: 0 }}>Availability requests</h1>
         <p style={{ color: "var(--color-muted)", maxWidth: 620 }}>
