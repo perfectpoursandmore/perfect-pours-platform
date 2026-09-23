@@ -2,7 +2,6 @@ import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/labels";
 import { isEmailConfigured } from "@/lib/email";
 import {
-  createProposal,
   addProposalItem,
   removeProposalItem,
   updateProposalAdjustments,
@@ -28,7 +27,7 @@ export default async function EventBookingPage({
   const eventId = params.id;
 
   const [
-    { data: proposal },
+    { data: proposalRow },
     { data: contract },
     { data: catalogItems },
     { data: templates },
@@ -60,6 +59,21 @@ export default async function EventBookingPage({
     supabase.from("qbo_connections").select("connected_at, realm_id").eq("id", true).single(),
     supabase.from("email_templates").select("id, name").eq("active", true).order("created_at"),
   ]);
+
+  // Every event gets a proposal row the first time this page loads -- it's
+  // really just "the pricing worksheet this event's contract/invoice pull
+  // from," not a client-facing quote she has to create as a separate step.
+  // Faith can add line items and generate the contract/invoice right away,
+  // whether or not she ever formally "sends" this as a proposal to review.
+  let proposal = proposalRow;
+  if (!proposal) {
+    const { data: created } = await supabase
+      .from("proposals")
+      .insert({ event_id: eventId })
+      .select("*")
+      .single();
+    proposal = created;
+  }
 
   const qboConnected = Boolean(qboConnection?.connected_at && qboConnection?.realm_id);
 
@@ -189,16 +203,13 @@ export default async function EventBookingPage({
 
       <div className="card">
         <h2 style={{ marginTop: 0, fontSize: "1rem" }}>Proposal</h2>
+        <p style={{ marginTop: "-0.5rem", marginBottom: "1rem", fontSize: "0.85rem", color: "var(--color-muted)" }}>
+          This is your pricing worksheet for the event -- add line items and adjustments here.
+          It&apos;s not something the client has to approve first; the contract and invoice below
+          pull straight from it whenever you&apos;re ready to send.
+        </p>
 
-        {!proposal ? (
-          <form action={createProposal}>
-            <input type="hidden" name="eventId" value={eventId} />
-            <button type="submit" className="button">
-              Create proposal
-            </button>
-          </form>
-        ) : (
-          <div style={{ display: "grid", gap: "1rem" }}>
+        <div style={{ display: "grid", gap: "1rem" }}>
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 <tr style={{ textAlign: "left", borderBottom: "1px solid var(--color-border)" }}>
@@ -285,15 +296,11 @@ export default async function EventBookingPage({
               <Row label="Deposit due" value={formatMoney(proposal.deposit_amount)} />
             </div>
           </div>
-        )}
       </div>
 
       <div className="card">
         <h2 style={{ marginTop: 0, fontSize: "1rem" }}>Contract</h2>
-        {!proposal ? (
-          <p style={{ color: "var(--color-muted)" }}>Create a proposal first.</p>
-        ) : (
-          <div style={{ display: "grid", gap: "1rem" }}>
+        <div style={{ display: "grid", gap: "1rem" }}>
             {contract?.status !== "signed" && (
               <form action={generateContract} style={{ display: "flex", gap: "0.75rem", alignItems: "end" }}>
                 <input type="hidden" name="eventId" value={eventId} />
@@ -337,7 +344,6 @@ export default async function EventBookingPage({
               </>
             )}
           </div>
-        )}
       </div>
 
       {proposal && contract && (
@@ -371,6 +377,15 @@ export default async function EventBookingPage({
                   Email sending isn&apos;t configured yet (see <a href="/admin/settings/email">Settings → Email</a>)
                   — this will just prepare the secure link below to copy/paste.
                 </p>
+              )}
+              {qboConnected && !financials?.deposit_invoice_id && !financials?.deposit_paid && (
+                <label style={{ display: "flex", gap: "0.5rem", alignItems: "start", fontSize: "0.9rem" }}>
+                  <input type="checkbox" name="alsoSendDepositInvoice" style={{ marginTop: "0.2rem" }} />
+                  <span>
+                    Also create &amp; send the deposit invoice via QuickBooks right now, so the
+                    contract and the invoice go out together.
+                  </span>
+                </label>
               )}
               <button type="submit" className="button" style={{ justifySelf: "start" }}>
                 Send Booking Documents

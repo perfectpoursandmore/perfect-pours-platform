@@ -145,3 +145,59 @@ export async function confirmMergeClients(formData: FormData) {
   revalidatePath("/admin/clients");
   redirect(`/admin/clients/${keepId}`);
 }
+
+/**
+ * Records a credit on this client's account -- e.g. a $200 rain-cancellation
+ * credit good until a certain date. Purely a record Faith keeps herself
+ * (shown on the client's page); it doesn't auto-apply anywhere.
+ */
+export async function addClientCredit(formData: FormData) {
+  await requireAdmin();
+  const supabase = createClient();
+  const clientId = String(formData.get("clientId"));
+  const amount = Number(formData.get("amount") ?? 0);
+  const reason = String(formData.get("reason") ?? "").trim();
+  const expiresOn = String(formData.get("expiresOn") ?? "").trim();
+
+  if (!amount || amount <= 0) {
+    redirect(`/admin/clients/${clientId}?error=${encodeURIComponent("Enter a credit amount greater than $0.")}`);
+  }
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  await supabase.from("client_credits").insert({
+    client_id: clientId,
+    amount,
+    reason: reason || null,
+    expires_on: expiresOn || null,
+    created_by: user?.id ?? null,
+  });
+
+  revalidatePath(`/admin/clients/${clientId}`);
+}
+
+/** Marks a credit as used -- e.g. applied toward a later booking. */
+export async function redeemClientCredit(formData: FormData) {
+  await requireAdmin();
+  const supabase = createClient();
+  const id = String(formData.get("id"));
+  const clientId = String(formData.get("clientId"));
+
+  await supabase.from("client_credits").update({ redeemed_at: new Date().toISOString() }).eq("id", id);
+
+  revalidatePath(`/admin/clients/${clientId}`);
+}
+
+/** Removes a credit entirely -- e.g. it was entered by mistake. */
+export async function removeClientCredit(formData: FormData) {
+  await requireAdmin();
+  const supabase = createClient();
+  const id = String(formData.get("id"));
+  const clientId = String(formData.get("clientId"));
+
+  await supabase.from("client_credits").delete().eq("id", id);
+
+  revalidatePath(`/admin/clients/${clientId}`);
+}

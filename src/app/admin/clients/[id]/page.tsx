@@ -1,8 +1,15 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { EVENT_TYPE_LABELS, EVENT_STATUS_LABELS, formatDate } from "@/lib/labels";
+import { EVENT_TYPE_LABELS, EVENT_STATUS_LABELS, formatDate, formatMoney } from "@/lib/labels";
 import { isEmailConfigured } from "@/lib/email";
-import { updateClientInfo, addClientNote, sendClientEmail } from "../actions";
+import {
+  updateClientInfo,
+  addClientNote,
+  sendClientEmail,
+  addClientCredit,
+  redeemClientCredit,
+  removeClientCredit,
+} from "../actions";
 
 export default async function ClientDetailPage({
   params,
@@ -19,6 +26,12 @@ export default async function ClientDetailPage({
   const { data: notes } = await supabase
     .from("client_notes")
     .select("id, note, created_at")
+    .eq("client_id", params.id)
+    .order("created_at", { ascending: false });
+
+  const { data: credits } = await supabase
+    .from("client_credits")
+    .select("id, amount, reason, expires_on, redeemed_at, created_at")
     .eq("client_id", params.id)
     .order("created_at", { ascending: false });
 
@@ -58,6 +71,75 @@ export default async function ClientDetailPage({
       </div>
 
       {searchParams.error && <p style={{ color: "#a33" }}>{searchParams.error}</p>}
+
+      {credits && credits.length > 0 && (
+        <div className="card" style={{ borderColor: credits.some((c) => !c.redeemed_at && (!c.expires_on || c.expires_on >= todayISO())) ? "#e0b84a" : undefined }}>
+          <h2 style={{ marginTop: 0, fontSize: "1rem" }}>Account credit</h2>
+          <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: "0.6rem" }}>
+            {credits.map((c) => {
+              const expired = c.expires_on ? c.expires_on < todayISO() : false;
+              const status = c.redeemed_at ? "Redeemed" : expired ? "Expired" : "Active";
+              const statusColor = c.redeemed_at ? "var(--color-muted)" : expired ? "#a33" : "#2a7a2a";
+              return (
+                <li key={c.id} style={{ borderTop: "1px solid var(--color-border)", paddingTop: "0.6rem" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", gap: "0.75rem", flexWrap: "wrap" }}>
+                    <div>
+                      <strong style={{ fontSize: "1.05rem" }}>{formatMoney(c.amount)}</strong>{" "}
+                      <span style={{ color: statusColor, fontSize: "0.85rem" }}>— {status}</span>
+                      {c.reason && <div style={{ fontSize: "0.9rem" }}>{c.reason}</div>}
+                      {c.expires_on && (
+                        <div style={{ fontSize: "0.8rem", color: "var(--color-muted)" }}>
+                          Expires {formatDate(c.expires_on)}
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ display: "flex", gap: "0.6rem", flexShrink: 0 }}>
+                      {!c.redeemed_at && (
+                        <form action={redeemClientCredit}>
+                          <input type="hidden" name="id" value={c.id} />
+                          <input type="hidden" name="clientId" value={client.id} />
+                          <button type="submit" style={{ background: "none", border: "1px solid var(--color-border)", borderRadius: 6, padding: "0.3rem 0.6rem", cursor: "pointer", fontSize: "0.85rem" }}>
+                            Mark redeemed
+                          </button>
+                        </form>
+                      )}
+                      <form action={removeClientCredit}>
+                        <input type="hidden" name="id" value={c.id} />
+                        <input type="hidden" name="clientId" value={client.id} />
+                        <button type="submit" style={{ background: "none", border: "none", color: "var(--color-accent)", cursor: "pointer", fontSize: "0.85rem" }}>
+                          Remove
+                        </button>
+                      </form>
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+
+      <details className="card">
+        <summary style={{ cursor: "pointer", fontSize: "1rem", fontWeight: 600 }}>Add account credit</summary>
+        <form action={addClientCredit} style={{ display: "grid", gridTemplateColumns: "1fr 2fr 1fr auto", gap: "0.75rem", alignItems: "end", marginTop: "0.75rem" }}>
+          <input type="hidden" name="clientId" value={client.id} />
+          <div>
+            <label htmlFor="creditAmount">Amount ($)</label>
+            <input id="creditAmount" name="amount" type="number" step="0.01" min="0.01" required />
+          </div>
+          <div>
+            <label htmlFor="creditReason">Reason (optional)</label>
+            <input id="creditReason" name="reason" placeholder="e.g. Rain cancellation — Staff Party 9/26" />
+          </div>
+          <div>
+            <label htmlFor="creditExpires">Expires (optional)</label>
+            <input id="creditExpires" name="expiresOn" type="date" />
+          </div>
+          <button type="submit" className="button">
+            Add credit
+          </button>
+        </form>
+      </details>
 
       <form action={updateClientInfo} className="card" style={{ display: "grid", gap: "1rem" }}>
         <input type="hidden" name="id" value={client.id} />
@@ -263,4 +345,8 @@ export default async function ClientDetailPage({
       )}
     </div>
   );
+}
+
+function todayISO() {
+  return new Date().toISOString().slice(0, 10);
 }
