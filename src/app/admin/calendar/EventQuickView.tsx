@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { EVENT_STATUS_LABELS, EVENT_TYPE_LABELS, formatDate } from "@/lib/labels";
-import { assignStaffToEvent, removeEventStaffAssignment } from "../events/actions";
+import { assignStaffToEvent, removeEventStaffAssignment, updateEventStaffRole } from "../events/actions";
 import { QUICKVIEW_OPEN_EVENT } from "./quickview-bus";
 
 // Keep in sync with ROLE_OPTIONS on the full Staff tab
@@ -122,6 +122,21 @@ export function EventQuickView() {
     }
   }
 
+  async function handleUpdateRole(assignmentId: string, role: string) {
+    if (!eventId || !role) return;
+    const formData = new FormData();
+    formData.set("id", assignmentId);
+    formData.set("eventId", eventId);
+    formData.set("role", role);
+    setBusy(true);
+    try {
+      await updateEventStaffRole(formData);
+      await load(eventId);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (!eventId) return null;
 
   return (
@@ -205,13 +220,25 @@ export function EventQuickView() {
               {data.assignments.length === 0 ? (
                 <p style={{ margin: 0, color: "var(--color-muted)", fontSize: "0.9rem" }}>No one assigned yet.</p>
               ) : (
-                <ul style={{ margin: 0, paddingLeft: "1.1rem", display: "grid", gap: "0.35rem" }}>
+                <ul style={{ margin: 0, paddingLeft: 0, listStyle: "none", display: "grid", gap: "0.5rem" }}>
                   {data.assignments.map((a) => {
                     const person = Array.isArray(a.staff) ? a.staff[0] : a.staff;
+                    const roleIsValid = ROLE_OPTIONS.includes(a.role);
                     return (
-                      <li key={a.id} style={{ fontSize: "0.9rem", display: "flex", justifyContent: "space-between", gap: "0.5rem" }}>
+                      <li
+                        key={a.id}
+                        style={{
+                          fontSize: "0.9rem",
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          flexWrap: "wrap",
+                          gap: "0.5rem",
+                          padding: "0.4rem 0",
+                          borderBottom: "1px solid var(--color-border)",
+                        }}
+                      >
                         <span>
-                          <span style={{ textTransform: "capitalize" }}>{a.role}</span>:{" "}
                           {a.is_open ? (
                             <em style={{ color: "var(--color-muted)", fontStyle: "normal" }}>Open</em>
                           ) : person ? (
@@ -220,14 +247,35 @@ export function EventQuickView() {
                             "—"
                           )}
                         </span>
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() => handleRemove(a.id)}
-                          style={{ background: "none", border: "none", color: "var(--color-accent)", cursor: "pointer", fontSize: "0.85rem" }}
-                        >
-                          Remove
-                        </button>
+                        <span style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                          <select
+                            aria-label="Role"
+                            value={a.role}
+                            disabled={busy}
+                            onChange={(e) => handleUpdateRole(a.id, e.target.value)}
+                            style={{
+                              padding: "0.3rem 0.45rem",
+                              borderRadius: 6,
+                              border: "1px solid var(--color-border)",
+                              fontSize: "0.85rem",
+                              color: roleIsValid ? "inherit" : "#a33",
+                            }}
+                          >
+                            {(roleIsValid ? ROLE_OPTIONS : [a.role, ...ROLE_OPTIONS]).map((role) => (
+                              <option key={role} value={role}>
+                                {ROLE_OPTIONS.includes(role) ? role[0].toUpperCase() + role.slice(1) : `⚠ ${role} — pick a role`}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => handleRemove(a.id)}
+                            style={{ background: "none", border: "none", color: "var(--color-accent)", cursor: "pointer", fontSize: "0.85rem" }}
+                          >
+                            Remove
+                          </button>
+                        </span>
                       </li>
                     );
                   })}
