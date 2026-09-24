@@ -11,6 +11,7 @@ import {
   markBalanceReceived,
   createAndSendInvoice,
   refreshInvoiceStatus,
+  resendInvoice,
 } from "./actions";
 import { AddProposalItemFields } from "./AddProposalItemFields";
 
@@ -124,7 +125,7 @@ export default async function EventBookingPage({
           </p>
         ) : financials?.balance_paid ? (
           <p style={{ color: "#2a7a2a", margin: 0 }}>✓ Paid in full.</p>
-        ) : financials?.invoice_id ? (
+        ) : financials?.invoice_id && financials?.invoice_status !== "draft" ? (
           <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
             <span style={{ color: "var(--color-muted)", fontSize: "0.9rem" }}>
               QuickBooks invoice sent
@@ -135,6 +136,18 @@ export default async function EventBookingPage({
               <input type="hidden" name="eventId" value={eventId} />
               <button type="submit" className="button">
                 Refresh payment status
+              </button>
+            </form>
+          </div>
+        ) : financials?.invoice_id ? (
+          <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
+            <span style={{ color: "var(--color-muted)", fontSize: "0.9rem" }}>
+              Invoice created in QuickBooks but hasn&apos;t gone out yet.
+            </span>
+            <form action={resendInvoice}>
+              <input type="hidden" name="eventId" value={eventId} />
+              <button type="submit" className="button">
+                Retry sending
               </button>
             </form>
           </div>

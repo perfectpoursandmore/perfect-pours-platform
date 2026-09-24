@@ -300,13 +300,21 @@ export async function createInvoice(
 }
 
 /**
- * Tells QuickBooks to email the invoice to the customer on file. If Faith's
+ * Tells QuickBooks to email the invoice to the customer. If Faith's
  * QuickBooks company has QuickBooks Payments enabled, Intuit automatically
  * includes a secure "Pay Now" button in that email — no separate payments
  * integration needed on this app's side.
+ *
+ * `sendTo` is passed explicitly rather than relying on the QuickBooks
+ * customer record having an email on file -- a client with no email saved
+ * in QuickBooks (common, since this app only sets one on the customer it
+ * creates if the client record here has one) makes this endpoint fail with
+ * an opaque 500 "System Failure Error" instead of a clear message, so this
+ * app supplies the address itself whenever it has one.
  */
-export async function sendInvoice(conn: QboConnection, invoiceId: string): Promise<void> {
-  await qboFetch(conn, `/invoice/${invoiceId}/send`, { method: "POST" });
+export async function sendInvoice(conn: QboConnection, invoiceId: string, sendTo?: string): Promise<void> {
+  const query = sendTo ? `?sendTo=${encodeURIComponent(sendTo)}` : "";
+  await qboFetch(conn, `/invoice/${invoiceId}/send${query}`, { method: "POST" });
 }
 
 /** Reads an invoice back to check whether it's been paid (Balance reaches 0). */

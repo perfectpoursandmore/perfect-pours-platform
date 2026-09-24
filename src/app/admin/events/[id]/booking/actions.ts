@@ -384,6 +384,8 @@ async function sendInvoiceForEvent(
 
   if (!loaded?.client || !proposal) return;
 
+  let createdInvoiceId: string | null = null;
+
   try {
     let qboCustomerId = loaded.client.qbo_customer_id as string | null;
     if (!qboCustomerId) {
@@ -408,16 +410,35 @@ async function sendInvoiceForEvent(
       amount: Number(proposal.total_amount),
       memo,
     });
-    await sendInvoice(conn, invoice.id);
+    createdInvoiceId = invoice.id;
 
+    // Save the invoice id as soon as it exists in QuickBooks -- even if the
+    // send step below fails, the app now knows this invoice is already
+    // there, so a retry re-sends it instead of creating a duplicate.
     await upsertEventFinancials(supabase, eventId, {
       invoice_id: invoice.id,
+      invoice_status: "draft",
+      qbo_sync_error: null,
+    });
+
+    if (!loaded.client.email) {
+      await upsertEventFinancials(supabase, eventId, {
+        qbo_sync_error:
+          "Invoice created in QuickBooks, but this client has no email on file to send it to -- add one on the client's page, then use Retry sending below.",
+      });
+      return;
+    }
+
+    await sendInvoice(conn, invoice.id, loaded.client.email);
+
+    await upsertEventFinancials(supabase, eventId, {
       invoice_status: "sent",
       invoice_sent_at: new Date().toISOString(),
       qbo_sync_error: null,
     });
   } catch (err) {
     await upsertEventFinancials(supabase, eventId, {
+      ...(createdInvoiceId ? { invoice_id: createdInvoiceId } : {}),
       qbo_sync_error: err instanceof Error ? err.message : "Something went wrong sending the invoice.",
     });
   }
@@ -434,6 +455,53 @@ export async function createAndSendInvoice(formData: FormData) {
   }
 
   await sendInvoiceForEvent(supabase, eventId, conn!);
+
+  revalidatePath(`/admin/events/${eventId}/booking`);
+}
+
+/**
+ * Re-sends an invoice that was already created in QuickBooks (has an
+ * invoice_id on file) but never successfully sent -- e.g. the send step
+ * errored, or the client had no email at the time. Does NOT create a new
+ * invoice, so this never produces a duplicate.
+ */
+export async function resendInvoice(formData: FormData) {
+  await requireAdmin();
+  const supabase = createClient();
+  const eventId = String(formData.get("eventId"));
+
+  const conn = await getValidConnection();
+  if (!conn) redirect(`/admin/events/${eventId}/booking?error=Connect QuickBooks in Settings first.`);
+
+  try {
+    const [{ data: financials }, loaded] = await Promise.all([
+      supabase.from("event_financials").select("invoice_id").eq("event_id", eventId).single(),
+      loadEventAndClientForInvoicing(supabase, eventId),
+    ]);
+
+    if (!financials?.invoice_id) {
+      redirect(`/admin/events/${eventId}/booking?error=No invoice on file to resend yet.`);
+    }
+    if (!loaded?.client?.email) {
+      await upsertEventFinancials(supabase, eventId, {
+        qbo_sync_error: "This client still has no email on file -- add one on the client's page, then try again.",
+      });
+      revalidatePath(`/admin/events/${eventId}/booking`);
+      return;
+    }
+
+    await sendInvoice(conn!, financials!.invoice_id, loaded.client.email);
+
+    await upsertEventFinancials(supabase, eventId, {
+      invoice_status: "sent",
+      invoice_sent_at: new Date().toISOString(),
+      qbo_sync_error: null,
+    });
+  } catch (err) {
+    await upsertEventFinancials(supabase, eventId, {
+      qbo_sync_error: err instanceof Error ? err.message : "Something went wrong sending the invoice.",
+    });
+  }
 
   revalidatePath(`/admin/events/${eventId}/booking`);
 }
