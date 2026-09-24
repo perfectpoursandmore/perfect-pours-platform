@@ -32,3 +32,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# A file the Claude desktop app saves here when a chat delivers one while
+# this folder is connected -- not part of the app, just parked on disk.
+/Claude outputs/
