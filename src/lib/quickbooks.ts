@@ -259,20 +259,25 @@ export async function findOrCreateCustomer(
 }
 
 /**
- * Creates a QuickBooks Invoice for one line item (the deposit, or the
- * balance) against Faith's default "Services" income account/item — see
- * README for the one-time step of confirming that item exists in her
- * QuickBooks company (QuickBooks always has at least one default service
- * item available, so this works out of the box for most accounts).
+ * Creates a QuickBooks Invoice for the event's full total against Faith's
+ * default "Services" income account/item — see README for the one-time
+ * step of confirming that item exists in her QuickBooks company
+ * (QuickBooks always has at least one default service item available, so
+ * this works out of the box for most accounts). An optional `memo` becomes
+ * the invoice's CustomerMemo, which shows right on the invoice the client
+ * sees -- used to ask for a specific retainer amount up front, since
+ * QuickBooks Payments lets the client type in whatever amount they want to
+ * pay rather than this app having to split it into a separate invoice.
  */
 export async function createInvoice(
   conn: QboConnection,
-  params: { customerId: string; description: string; amount: number }
+  params: { customerId: string; description: string; amount: number; memo?: string }
 ): Promise<{ id: string }> {
   const created = await qboFetch(conn, "/invoice", {
     method: "POST",
     body: JSON.stringify({
       CustomerRef: { value: params.customerId },
+      ...(params.memo ? { CustomerMemo: { value: params.memo } } : {}),
       Line: [
         {
           Amount: params.amount,
@@ -282,7 +287,7 @@ export async function createInvoice(
             // "1" is QuickBooks' universal default service/product item id —
             // present in every QBO company unless it's been deleted. Faith
             // can repoint this to a specific catalog item later if she wants
-            // deposits/balances to land on a distinct income account.
+            // invoices to land on a distinct income account.
             ItemRef: { value: "1" },
           },
         },

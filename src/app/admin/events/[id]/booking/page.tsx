@@ -9,10 +9,8 @@ import {
   sendBookingDocuments,
   markDepositReceived,
   markBalanceReceived,
-  createAndSendDepositInvoice,
-  refreshDepositInvoiceStatus,
-  createAndSendBalanceInvoice,
-  refreshBalanceInvoiceStatus,
+  createAndSendInvoice,
+  refreshInvoiceStatus,
 } from "./actions";
 import { AddProposalItemFields } from "./AddProposalItemFields";
 
@@ -96,7 +94,7 @@ export default async function EventBookingPage({
         <div style={{ display: "flex", gap: "2rem", flexWrap: "wrap" }}>
           <StatusLine label="Proposal" ok={Boolean(financials?.proposal_sent)} okText="Sent" noText="Not sent" />
           <StatusLine label="Contract" ok={contract?.status === "signed"} okText="Signed" noText={contract?.status === "sent" ? "Sent, unsigned" : "Not sent"} />
-          <StatusLine label="Deposit" ok={Boolean(financials?.deposit_paid)} okText="Paid" noText="Outstanding" />
+          <StatusLine label="Retainer" ok={Boolean(financials?.deposit_paid)} okText="Received" noText="Outstanding" />
           <StatusLine label="Balance" ok={Boolean(financials?.balance_paid)} okText="Paid" noText="Outstanding" />
         </div>
         {financials && (
@@ -112,68 +110,28 @@ export default async function EventBookingPage({
       )}
 
       <div className="card">
-        <h2 style={{ marginTop: 0, fontSize: "1rem" }}>Deposit</h2>
+        <h2 style={{ marginTop: 0, fontSize: "1rem" }}>Invoice</h2>
+        <p style={{ marginTop: "-0.5rem", marginBottom: "1rem", fontSize: "0.85rem", color: "var(--color-muted)" }}>
+          One QuickBooks invoice for the full total. The invoice includes a note asking for the
+          retainer amount up front, and if QuickBooks Payments has &quot;Allow partial
+          payments&quot; turned on (Settings → Payments, in QuickBooks itself), the client can pay
+          just that amount now and the rest later.
+        </p>
         {!qboConnected ? (
           <p style={{ color: "var(--color-muted)" }}>
-            <a href="/admin/settings/quickbooks">Connect QuickBooks</a> to send a real deposit
-            invoice with a secure payment link, or mark it received manually below.
-          </p>
-        ) : financials?.deposit_paid ? (
-          <p style={{ color: "#2a7a2a", margin: 0 }}>✓ Deposit paid.</p>
-        ) : financials?.deposit_invoice_id ? (
-          <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
-            <span style={{ color: "var(--color-muted)", fontSize: "0.9rem" }}>
-              QuickBooks invoice sent
-              {financials.deposit_invoice_sent_at &&
-                ` ${new Date(financials.deposit_invoice_sent_at).toLocaleDateString()}`}{" "}
-              — not yet paid.
-            </span>
-            <form action={refreshDepositInvoiceStatus}>
-              <input type="hidden" name="eventId" value={eventId} />
-              <button type="submit" className="button">
-                Refresh payment status
-              </button>
-            </form>
-          </div>
-        ) : (
-          <form action={createAndSendDepositInvoice}>
-            <input type="hidden" name="eventId" value={eventId} />
-            <button type="submit" className="button">
-              Create &amp; send deposit invoice via QuickBooks
-            </button>
-          </form>
-        )}
-        {!financials?.deposit_paid && (
-          <form action={markDepositReceived} style={{ marginTop: "0.75rem" }}>
-            <input type="hidden" name="eventId" value={eventId} />
-            <button
-              type="submit"
-              style={{ background: "none", border: "1px solid var(--color-border)", borderRadius: 8, padding: "0.5rem 0.9rem", cursor: "pointer" }}
-            >
-              Mark deposit received manually (cash/check/Zelle)
-            </button>
-          </form>
-        )}
-      </div>
-
-      <div className="card">
-        <h2 style={{ marginTop: 0, fontSize: "1rem" }}>Balance</h2>
-        {!qboConnected ? (
-          <p style={{ color: "var(--color-muted)" }}>
-            <a href="/admin/settings/quickbooks">Connect QuickBooks</a> to send a real balance
-            invoice with a secure payment link, or mark it received manually below.
+            <a href="/admin/settings/quickbooks">Connect QuickBooks</a> to send a real invoice with
+            a secure payment link, or mark payments received manually below.
           </p>
         ) : financials?.balance_paid ? (
-          <p style={{ color: "#2a7a2a", margin: 0 }}>✓ Balance paid.</p>
-        ) : financials?.balance_invoice_id ? (
+          <p style={{ color: "#2a7a2a", margin: 0 }}>✓ Paid in full.</p>
+        ) : financials?.invoice_id ? (
           <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
             <span style={{ color: "var(--color-muted)", fontSize: "0.9rem" }}>
               QuickBooks invoice sent
-              {financials.balance_invoice_sent_at &&
-                ` ${new Date(financials.balance_invoice_sent_at).toLocaleDateString()}`}{" "}
-              — not yet paid.
+              {financials.invoice_sent_at && ` ${new Date(financials.invoice_sent_at).toLocaleDateString()}`}
+              {financials.deposit_paid ? " — retainer received, balance outstanding." : " — not yet paid."}
             </span>
-            <form action={refreshBalanceInvoiceStatus}>
+            <form action={refreshInvoiceStatus}>
               <input type="hidden" name="eventId" value={eventId} />
               <button type="submit" className="button">
                 Refresh payment status
@@ -181,24 +139,37 @@ export default async function EventBookingPage({
             </form>
           </div>
         ) : (
-          <form action={createAndSendBalanceInvoice}>
+          <form action={createAndSendInvoice}>
             <input type="hidden" name="eventId" value={eventId} />
             <button type="submit" className="button">
-              Create &amp; send balance invoice via QuickBooks
+              Create &amp; send invoice via QuickBooks
             </button>
           </form>
         )}
-        {!financials?.balance_paid && (
-          <form action={markBalanceReceived} style={{ marginTop: "0.75rem" }}>
-            <input type="hidden" name="eventId" value={eventId} />
-            <button
-              type="submit"
-              style={{ background: "none", border: "1px solid var(--color-border)", borderRadius: 8, padding: "0.5rem 0.9rem", cursor: "pointer" }}
-            >
-              Mark balance received manually (cash/check/Zelle)
-            </button>
-          </form>
-        )}
+        <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", marginTop: "0.75rem" }}>
+          {!financials?.deposit_paid && (
+            <form action={markDepositReceived}>
+              <input type="hidden" name="eventId" value={eventId} />
+              <button
+                type="submit"
+                style={{ background: "none", border: "1px solid var(--color-border)", borderRadius: 8, padding: "0.5rem 0.9rem", cursor: "pointer" }}
+              >
+                Mark retainer received manually (cash/check/Zelle)
+              </button>
+            </form>
+          )}
+          {!financials?.balance_paid && (
+            <form action={markBalanceReceived}>
+              <input type="hidden" name="eventId" value={eventId} />
+              <button
+                type="submit"
+                style={{ background: "none", border: "1px solid var(--color-border)", borderRadius: 8, padding: "0.5rem 0.9rem", cursor: "pointer" }}
+              >
+                Mark paid in full manually (cash/check/Zelle)
+              </button>
+            </form>
+          )}
+        </div>
       </div>
 
       <div className="card">
@@ -378,12 +349,12 @@ export default async function EventBookingPage({
                   — this will just prepare the secure link below to copy/paste.
                 </p>
               )}
-              {qboConnected && !financials?.deposit_invoice_id && !financials?.deposit_paid && (
+              {qboConnected && !financials?.invoice_id && (
                 <label style={{ display: "flex", gap: "0.5rem", alignItems: "start", fontSize: "0.9rem" }}>
-                  <input type="checkbox" name="alsoSendDepositInvoice" style={{ marginTop: "0.2rem" }} />
+                  <input type="checkbox" name="alsoSendInvoice" style={{ marginTop: "0.2rem" }} />
                   <span>
-                    Also create &amp; send the deposit invoice via QuickBooks right now, so the
-                    contract and the invoice go out together.
+                    Also create &amp; send the invoice via QuickBooks right now, so the contract
+                    and the invoice go out together.
                   </span>
                 </label>
               )}

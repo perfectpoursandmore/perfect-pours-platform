@@ -29,6 +29,9 @@ export async function upsertEventFinancials(
     balance_invoice_id: string | null;
     balance_invoice_status: string | null;
     balance_invoice_sent_at: string | null;
+    invoice_id: string | null;
+    invoice_status: string | null;
+    invoice_sent_at: string | null;
     qbo_sync_error: string | null;
   }>
 ) {

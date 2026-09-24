@@ -288,21 +288,21 @@ export async function sendBookingDocuments(formData: FormData) {
     }
   }
 
-  // Optional: when Faith checks "also send the deposit invoice", fire that
-  // off too so the contract and the invoice go out in one click instead of
-  // two trips to this page. Silently skipped if QuickBooks isn't connected
-  // or a deposit invoice already exists/was paid -- the Deposit card above
-  // stays the source of truth for that.
-  if (String(formData.get("alsoSendDepositInvoice") ?? "") === "on") {
+  // Optional: when Faith checks "also send the invoice", fire that off too
+  // so the contract and the invoice go out in one click instead of two
+  // trips to this page. Silently skipped if QuickBooks isn't connected or
+  // an invoice already exists -- the Invoice card above stays the source
+  // of truth for that.
+  if (String(formData.get("alsoSendInvoice") ?? "") === "on") {
     const conn = await getValidConnection();
     if (conn) {
       const { data: existingFinancials } = await supabase
         .from("event_financials")
-        .select("deposit_invoice_id, deposit_paid")
+        .select("invoice_id")
         .eq("event_id", eventId)
         .single();
-      if (!existingFinancials?.deposit_invoice_id && !existingFinancials?.deposit_paid) {
-        await sendDepositInvoiceForEvent(supabase, eventId, conn);
+      if (!existingFinancials?.invoice_id) {
+        await sendInvoiceForEvent(supabase, eventId, conn);
       }
     }
   }
@@ -357,15 +357,18 @@ async function loadEventAndClientForInvoicing(
 }
 
 /**
- * The actual QuickBooks work behind "create & send deposit invoice" --
- * pulled out so both the standalone Deposit-card button and the combined
- * "send contract + invoice" checkbox on Send to client can trigger it.
- * Assumes the caller already confirmed QuickBooks is connected (conn is
- * non-null); no-ops quietly if there's no client or proposal to invoice,
- * which in practice shouldn't happen since every event now gets a proposal
- * row automatically.
+ * The actual QuickBooks work behind "create & send invoice" -- pulled out
+ * so both the standalone Invoice-card button and the combined "send
+ * contract + invoice" checkbox on Send to client can trigger it. One
+ * invoice for the event's full total, with a memo asking for the retainer
+ * amount up front -- QuickBooks Payments lets the client type in whatever
+ * amount they want to pay at checkout, rather than this app having to
+ * split it into a separate deposit invoice. Assumes the caller already
+ * confirmed QuickBooks is connected (conn is non-null); no-ops quietly if
+ * there's no client or proposal to invoice, which in practice shouldn't
+ * happen since every event now gets a proposal row automatically.
  */
-async function sendDepositInvoiceForEvent(
+async function sendInvoiceForEvent(
   supabase: ReturnType<typeof createClient>,
   eventId: string,
   conn: NonNullable<Awaited<ReturnType<typeof getValidConnection>>>
@@ -373,7 +376,7 @@ async function sendDepositInvoiceForEvent(
   const loaded = await loadEventAndClientForInvoicing(supabase, eventId);
   const { data: proposal } = await supabase
     .from("proposals")
-    .select("deposit_amount")
+    .select("total_amount, deposit_amount")
     .eq("event_id", eventId)
     .order("created_at", { ascending: false })
     .limit(1)
@@ -393,27 +396,34 @@ async function sendDepositInvoiceForEvent(
       await supabase.from("clients").update({ qbo_customer_id: qboCustomerId }).eq("id", loaded.client.id);
     }
 
+    const depositAmount = Number(proposal.deposit_amount);
+    const memo =
+      depositAmount > 0
+        ? `A retainer of ${formatMoney(depositAmount)} is due now to confirm this booking, with the remaining balance due before the event. Enter the amount you'd like to pay now at checkout.`
+        : undefined;
+
     const invoice = await createInvoice(conn, {
       customerId: qboCustomerId,
-      description: `Deposit — ${loaded.event.name}`,
-      amount: Number(proposal.deposit_amount),
+      description: `Invoice — ${loaded.event.name}`,
+      amount: Number(proposal.total_amount),
+      memo,
     });
     await sendInvoice(conn, invoice.id);
 
     await upsertEventFinancials(supabase, eventId, {
-      deposit_invoice_id: invoice.id,
-      deposit_invoice_status: "sent",
-      deposit_invoice_sent_at: new Date().toISOString(),
+      invoice_id: invoice.id,
+      invoice_status: "sent",
+      invoice_sent_at: new Date().toISOString(),
       qbo_sync_error: null,
     });
   } catch (err) {
     await upsertEventFinancials(supabase, eventId, {
-      qbo_sync_error: err instanceof Error ? err.message : "Something went wrong sending the deposit invoice.",
+      qbo_sync_error: err instanceof Error ? err.message : "Something went wrong sending the invoice.",
     });
   }
 }
 
-export async function createAndSendDepositInvoice(formData: FormData) {
+export async function createAndSendInvoice(formData: FormData) {
   await requireAdmin();
   const supabase = createClient();
   const eventId = String(formData.get("eventId"));
@@ -423,12 +433,22 @@ export async function createAndSendDepositInvoice(formData: FormData) {
     redirect(`/admin/events/${eventId}/booking?error=Connect QuickBooks in Settings first.`);
   }
 
-  await sendDepositInvoiceForEvent(supabase, eventId, conn!);
+  await sendInvoiceForEvent(supabase, eventId, conn!);
 
   revalidatePath(`/admin/events/${eventId}/booking`);
 }
 
-export async function refreshDepositInvoiceStatus(formData: FormData) {
+/**
+ * Re-reads the invoice's balance from QuickBooks to detect payment -- local
+ * dev can't receive QuickBooks' webhook (that needs a public HTTPS URL).
+ * Since it's one invoice for the full total and QuickBooks Payments allows
+ * a partial payment, "retainer received" is inferred from how much has
+ * come in rather than from a separate invoice: once the amount paid so far
+ * reaches the deposit amount, the retainer counts as received (which is
+ * what flips an event to "booked" once the contract's signed too); once
+ * the balance hits zero, it's paid in full.
+ */
+export async function refreshInvoiceStatus(formData: FormData) {
   await requireAdmin();
   const supabase = createClient();
   const eventId = String(formData.get("eventId"));
@@ -437,114 +457,33 @@ export async function refreshDepositInvoiceStatus(formData: FormData) {
   if (!conn) redirect(`/admin/events/${eventId}/booking?error=Connect QuickBooks in Settings first.`);
 
   try {
-    const { data: financials } = await supabase
-      .from("event_financials")
-      .select("deposit_invoice_id")
-      .eq("event_id", eventId)
-      .single();
+    const [{ data: financials }, { data: proposal }] = await Promise.all([
+      supabase.from("event_financials").select("invoice_id").eq("event_id", eventId).single(),
+      supabase
+        .from("proposals")
+        .select("deposit_amount")
+        .eq("event_id", eventId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .single(),
+    ]);
 
-    if (financials?.deposit_invoice_id) {
-      const status = await getInvoiceStatus(conn!, financials.deposit_invoice_id);
+    if (financials?.invoice_id) {
+      const status = await getInvoiceStatus(conn!, financials.invoice_id);
+      const paidSoFar = status.totalAmount - status.balance;
+      const depositAmount = Number(proposal?.deposit_amount ?? 0);
+
       await upsertEventFinancials(supabase, eventId, {
-        deposit_invoice_status: status.paid ? "paid" : "sent",
-        ...(status.paid ? { deposit_paid: true } : {}),
-        qbo_sync_error: null,
-      });
-      if (status.paid) await maybeMarkEventBooked(supabase, eventId);
-    }
-  } catch (err) {
-    await upsertEventFinancials(supabase, eventId, {
-      qbo_sync_error: err instanceof Error ? err.message : "Couldn't check the deposit invoice status.",
-    });
-  }
-
-  revalidatePath(`/admin/events/${eventId}/booking`);
-}
-
-export async function createAndSendBalanceInvoice(formData: FormData) {
-  await requireAdmin();
-  const supabase = createClient();
-  const eventId = String(formData.get("eventId"));
-
-  const conn = await getValidConnection();
-  if (!conn) redirect(`/admin/events/${eventId}/booking?error=Connect QuickBooks in Settings first.`);
-
-  // Validation redirects stay outside the try/catch — see the note in
-  // createAndSendDepositInvoice above.
-  const loaded = await loadEventAndClientForInvoicing(supabase, eventId);
-  const { data: proposal } = await supabase
-    .from("proposals")
-    .select("total_amount, deposit_amount")
-    .eq("event_id", eventId)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .single();
-
-  if (!loaded?.client || !proposal) {
-    redirect(`/admin/events/${eventId}/booking?error=Create a proposal before sending an invoice.`);
-  }
-
-  try {
-    let qboCustomerId = loaded!.client.qbo_customer_id as string | null;
-    if (!qboCustomerId) {
-      qboCustomerId = await findOrCreateCustomer(conn!, {
-        firstName: loaded!.client.first_name,
-        lastName: loaded!.client.last_name,
-        email: loaded!.client.email,
-        phone: loaded!.client.phone,
-      });
-      await supabase.from("clients").update({ qbo_customer_id: qboCustomerId }).eq("id", loaded!.client.id);
-    }
-
-    const balanceAmount = Number(proposal!.total_amount) - Number(proposal!.deposit_amount);
-    const invoice = await createInvoice(conn!, {
-      customerId: qboCustomerId,
-      description: `Balance — ${loaded!.event.name}`,
-      amount: balanceAmount,
-    });
-    await sendInvoice(conn!, invoice.id);
-
-    await upsertEventFinancials(supabase, eventId, {
-      balance_invoice_id: invoice.id,
-      balance_invoice_status: "sent",
-      balance_invoice_sent_at: new Date().toISOString(),
-      qbo_sync_error: null,
-    });
-  } catch (err) {
-    await upsertEventFinancials(supabase, eventId, {
-      qbo_sync_error: err instanceof Error ? err.message : "Something went wrong sending the balance invoice.",
-    });
-  }
-
-  revalidatePath(`/admin/events/${eventId}/booking`);
-}
-
-export async function refreshBalanceInvoiceStatus(formData: FormData) {
-  await requireAdmin();
-  const supabase = createClient();
-  const eventId = String(formData.get("eventId"));
-
-  const conn = await getValidConnection();
-  if (!conn) redirect(`/admin/events/${eventId}/booking?error=Connect QuickBooks in Settings first.`);
-
-  try {
-    const { data: financials } = await supabase
-      .from("event_financials")
-      .select("balance_invoice_id")
-      .eq("event_id", eventId)
-      .single();
-
-    if (financials?.balance_invoice_id) {
-      const status = await getInvoiceStatus(conn!, financials.balance_invoice_id);
-      await upsertEventFinancials(supabase, eventId, {
-        balance_invoice_status: status.paid ? "paid" : "sent",
+        invoice_status: status.paid ? "paid" : "sent",
+        ...(depositAmount > 0 && paidSoFar >= depositAmount ? { deposit_paid: true } : {}),
         ...(status.paid ? { balance_paid: true } : {}),
         qbo_sync_error: null,
       });
+      await maybeMarkEventBooked(supabase, eventId);
     }
   } catch (err) {
     await upsertEventFinancials(supabase, eventId, {
-      qbo_sync_error: err instanceof Error ? err.message : "Couldn't check the balance invoice status.",
+      qbo_sync_error: err instanceof Error ? err.message : "Couldn't check the invoice status.",
     });
   }
 
