@@ -12,7 +12,6 @@ import {
   getValidConnection,
   findOrCreateCustomer,
   createInvoice,
-  sendInvoice,
   getInvoiceStatus,
 } from "@/lib/quickbooks";
 import { isEmailConfigured, sendTemplatedEmail } from "@/lib/email";
@@ -288,12 +287,13 @@ export async function sendBookingDocuments(formData: FormData) {
     }
   }
 
-  // Optional: when Faith checks "also send the invoice", fire that off too
-  // so the contract and the invoice go out in one click instead of two
-  // trips to this page. Silently skipped if QuickBooks isn't connected or
-  // an invoice already exists -- the Invoice card above stays the source
-  // of truth for that.
-  if (String(formData.get("alsoSendInvoice") ?? "") === "on") {
+  // Optional: when Faith checks "also create the invoice", fire that off
+  // too so the contract goes out and the invoice is sitting ready in
+  // QuickBooks in one click. This only CREATES the invoice -- Faith still
+  // reviews and sends it herself from inside QuickBooks, same as if she'd
+  // clicked "Create invoice" on the Invoice card above. Silently skipped
+  // if QuickBooks isn't connected or an invoice already exists.
+  if (String(formData.get("alsoCreateInvoice") ?? "") === "on") {
     const conn = await getValidConnection();
     if (conn) {
       const { data: existingFinancials } = await supabase
@@ -302,7 +302,7 @@ export async function sendBookingDocuments(formData: FormData) {
         .eq("event_id", eventId)
         .single();
       if (!existingFinancials?.invoice_id) {
-        await sendInvoiceForEvent(supabase, eventId, conn);
+        await createDraftInvoiceForEvent(supabase, eventId, conn);
       }
     }
   }
@@ -368,7 +368,16 @@ async function loadEventAndClientForInvoicing(
  * there's no client or proposal to invoice, which in practice shouldn't
  * happen since every event now gets a proposal row automatically.
  */
-async function sendInvoiceForEvent(
+/**
+ * Creates a QuickBooks invoice for the event's full total (with a memo
+ * asking for the retainer amount up front) and saves its id, linking it to
+ * this event -- but does NOT send it. Faith reviews, edits, and sends the
+ * invoice herself from inside QuickBooks (her own email template lives
+ * there), so this app never emails an invoice on its own. "Refresh payment
+ * status" below is how the app finds out later that she sent it and the
+ * client paid.
+ */
+async function createDraftInvoiceForEvent(
   supabase: ReturnType<typeof createClient>,
   eventId: string,
   conn: NonNullable<Awaited<ReturnType<typeof getValidConnection>>>
@@ -383,8 +392,6 @@ async function sendInvoiceForEvent(
     .single();
 
   if (!loaded?.client || !proposal) return;
-
-  let createdInvoiceId: string | null = null;
 
   try {
     let qboCustomerId = loaded.client.qbo_customer_id as string | null;
@@ -410,41 +417,20 @@ async function sendInvoiceForEvent(
       amount: Number(proposal.total_amount),
       memo,
     });
-    createdInvoiceId = invoice.id;
 
-    // Save the invoice id as soon as it exists in QuickBooks -- even if the
-    // send step below fails, the app now knows this invoice is already
-    // there, so a retry re-sends it instead of creating a duplicate.
     await upsertEventFinancials(supabase, eventId, {
       invoice_id: invoice.id,
       invoice_status: "draft",
       qbo_sync_error: null,
     });
-
-    if (!loaded.client.email) {
-      await upsertEventFinancials(supabase, eventId, {
-        qbo_sync_error:
-          "Invoice created in QuickBooks, but this client has no email on file to send it to -- add one on the client's page, then use Retry sending below.",
-      });
-      return;
-    }
-
-    await sendInvoice(conn, invoice.id, loaded.client.email);
-
-    await upsertEventFinancials(supabase, eventId, {
-      invoice_status: "sent",
-      invoice_sent_at: new Date().toISOString(),
-      qbo_sync_error: null,
-    });
   } catch (err) {
     await upsertEventFinancials(supabase, eventId, {
-      ...(createdInvoiceId ? { invoice_id: createdInvoiceId } : {}),
-      qbo_sync_error: err instanceof Error ? err.message : "Something went wrong sending the invoice.",
+      qbo_sync_error: err instanceof Error ? err.message : "Something went wrong creating the invoice.",
     });
   }
 }
 
-export async function createAndSendInvoice(formData: FormData) {
+export async function createInvoiceDraft(formData: FormData) {
   await requireAdmin();
   const supabase = createClient();
   const eventId = String(formData.get("eventId"));
@@ -454,54 +440,7 @@ export async function createAndSendInvoice(formData: FormData) {
     redirect(`/admin/events/${eventId}/booking?error=Connect QuickBooks in Settings first.`);
   }
 
-  await sendInvoiceForEvent(supabase, eventId, conn!);
-
-  revalidatePath(`/admin/events/${eventId}/booking`);
-}
-
-/**
- * Re-sends an invoice that was already created in QuickBooks (has an
- * invoice_id on file) but never successfully sent -- e.g. the send step
- * errored, or the client had no email at the time. Does NOT create a new
- * invoice, so this never produces a duplicate.
- */
-export async function resendInvoice(formData: FormData) {
-  await requireAdmin();
-  const supabase = createClient();
-  const eventId = String(formData.get("eventId"));
-
-  const conn = await getValidConnection();
-  if (!conn) redirect(`/admin/events/${eventId}/booking?error=Connect QuickBooks in Settings first.`);
-
-  try {
-    const [{ data: financials }, loaded] = await Promise.all([
-      supabase.from("event_financials").select("invoice_id").eq("event_id", eventId).single(),
-      loadEventAndClientForInvoicing(supabase, eventId),
-    ]);
-
-    if (!financials?.invoice_id) {
-      redirect(`/admin/events/${eventId}/booking?error=No invoice on file to resend yet.`);
-    }
-    if (!loaded?.client?.email) {
-      await upsertEventFinancials(supabase, eventId, {
-        qbo_sync_error: "This client still has no email on file -- add one on the client's page, then try again.",
-      });
-      revalidatePath(`/admin/events/${eventId}/booking`);
-      return;
-    }
-
-    await sendInvoice(conn!, financials!.invoice_id, loaded.client.email);
-
-    await upsertEventFinancials(supabase, eventId, {
-      invoice_status: "sent",
-      invoice_sent_at: new Date().toISOString(),
-      qbo_sync_error: null,
-    });
-  } catch (err) {
-    await upsertEventFinancials(supabase, eventId, {
-      qbo_sync_error: err instanceof Error ? err.message : "Something went wrong sending the invoice.",
-    });
-  }
+  await createDraftInvoiceForEvent(supabase, eventId, conn!);
 
   revalidatePath(`/admin/events/${eventId}/booking`);
 }

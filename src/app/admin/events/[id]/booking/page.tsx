@@ -9,9 +9,8 @@ import {
   sendBookingDocuments,
   markDepositReceived,
   markBalanceReceived,
-  createAndSendInvoice,
+  createInvoiceDraft,
   refreshInvoiceStatus,
-  resendInvoice,
 } from "./actions";
 import { AddProposalItemFields } from "./AddProposalItemFields";
 
@@ -113,49 +112,37 @@ export default async function EventBookingPage({
       <div className="card">
         <h2 style={{ marginTop: 0, fontSize: "1rem" }}>Invoice</h2>
         <p style={{ marginTop: "-0.5rem", marginBottom: "1rem", fontSize: "0.85rem", color: "var(--color-muted)" }}>
-          One QuickBooks invoice for the full total. The invoice includes a note asking for the
-          retainer amount up front, and if QuickBooks Payments has &quot;Allow partial
-          payments&quot; turned on (Settings → Payments, in QuickBooks itself), the client can pay
-          just that amount now and the rest later.
+          One QuickBooks invoice for the full total, linked to this event automatically. It includes
+          a note asking for the retainer amount up front, and if QuickBooks Payments has &quot;Allow
+          partial payments&quot; turned on (Settings → Payments, in QuickBooks itself), the client can
+          pay just that amount now and the rest later. This app only creates the invoice — you
+          review it and send it yourself from inside QuickBooks.
         </p>
         {!qboConnected ? (
           <p style={{ color: "var(--color-muted)" }}>
-            <a href="/admin/settings/quickbooks">Connect QuickBooks</a> to send a real invoice with
-            a secure payment link, or mark payments received manually below.
+            <a href="/admin/settings/quickbooks">Connect QuickBooks</a> to create a linked invoice
+            there, or mark payments received manually below.
           </p>
         ) : financials?.balance_paid ? (
           <p style={{ color: "#2a7a2a", margin: 0 }}>✓ Paid in full.</p>
-        ) : financials?.invoice_id && financials?.invoice_status !== "draft" ? (
+        ) : financials?.invoice_id ? (
           <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
             <span style={{ color: "var(--color-muted)", fontSize: "0.9rem" }}>
-              QuickBooks invoice sent
-              {financials.invoice_sent_at && ` ${new Date(financials.invoice_sent_at).toLocaleDateString()}`}
-              {financials.deposit_paid ? " — retainer received, balance outstanding." : " — not yet paid."}
+              Invoice created in QuickBooks and linked to this event.
+              {financials.deposit_paid ? " Retainer received, balance outstanding." : " Review it in QuickBooks and send it from there whenever you're ready."}
             </span>
             <form action={refreshInvoiceStatus}>
               <input type="hidden" name="eventId" value={eventId} />
               <button type="submit" className="button">
-                Refresh payment status
-              </button>
-            </form>
-          </div>
-        ) : financials?.invoice_id ? (
-          <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
-            <span style={{ color: "var(--color-muted)", fontSize: "0.9rem" }}>
-              Invoice created in QuickBooks but hasn&apos;t gone out yet.
-            </span>
-            <form action={resendInvoice}>
-              <input type="hidden" name="eventId" value={eventId} />
-              <button type="submit" className="button">
-                Retry sending
+                Check payment status
               </button>
             </form>
           </div>
         ) : (
-          <form action={createAndSendInvoice}>
+          <form action={createInvoiceDraft}>
             <input type="hidden" name="eventId" value={eventId} />
             <button type="submit" className="button">
-              Create &amp; send invoice via QuickBooks
+              Create invoice in QuickBooks
             </button>
           </form>
         )}
@@ -364,10 +351,10 @@ export default async function EventBookingPage({
               )}
               {qboConnected && !financials?.invoice_id && (
                 <label style={{ display: "flex", gap: "0.5rem", alignItems: "start", fontSize: "0.9rem" }}>
-                  <input type="checkbox" name="alsoSendInvoice" style={{ marginTop: "0.2rem" }} />
+                  <input type="checkbox" name="alsoCreateInvoice" style={{ marginTop: "0.2rem" }} />
                   <span>
-                    Also create &amp; send the invoice via QuickBooks right now, so the contract
-                    and the invoice go out together.
+                    Also create the invoice in QuickBooks right now (you&apos;ll still review and
+                    send it yourself from there).
                   </span>
                 </label>
               )}
