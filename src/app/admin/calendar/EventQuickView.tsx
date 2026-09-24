@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
-import { EVENT_STATUS_LABELS, EVENT_TYPE_LABELS, formatDate } from "@/lib/labels";
+import { EVENT_STATUS_LABELS, EVENT_TYPE_LABELS, formatDate, formatTime } from "@/lib/labels";
 import { assignStaffToEvent, removeEventStaffAssignment, updateEventStaffRole } from "../events/actions";
 import { QUICKVIEW_OPEN_EVENT } from "./quickview-bus";
 
@@ -22,6 +22,9 @@ type QuickViewEvent = {
   state: string | null;
   guest_count: number | null;
   status: string;
+  staff_arrival_time: string | null;
+  guest_arrival_time: string | null;
+  staff_end_time: string | null;
   client: { first_name: string; last_name: string } | null;
   client_id: string | null;
 };
@@ -213,6 +216,9 @@ export function EventQuickView() {
                   .join(", ") || "TBD"}
               />
               <InfoField label="Guest count" value={data.event.guest_count ? String(data.event.guest_count) : "—"} />
+              <InfoField label="Staff arrival" value={formatTime(data.event.staff_arrival_time)} />
+              <InfoField label="Event start" value={formatTime(data.event.guest_arrival_time)} />
+              <InfoField label="Staff end" value={formatTime(data.event.staff_end_time)} />
             </div>
 
             <div>

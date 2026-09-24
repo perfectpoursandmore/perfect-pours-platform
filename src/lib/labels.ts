@@ -59,6 +59,18 @@ export function formatDateTime(iso: string | null, timeZone = "America/New_York"
   }).format(new Date(iso));
 }
 
+// Time-only, no date -- for showing an event's staff-arrival/start/end
+// times on their own (e.g. the calendar quick-view popover), where the
+// date's already shown separately and repeating it would be noise.
+export function formatTime(iso: string | null, timeZone = "America/New_York"): string {
+  if (!iso) return "—";
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(iso));
+}
+
 export function formatDate(iso: string | null): string {
   if (!iso) return "—";
   // Plain "YYYY-MM-DD" date columns — format without a timezone conversion
