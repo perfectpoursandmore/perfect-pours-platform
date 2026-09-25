@@ -14,6 +14,7 @@ import type { CalendarEvent } from "./types";
 import { clientName } from "./types";
 import { EventChip, EventNameLink } from "./EventChip";
 import { EventQuickView } from "./EventQuickView";
+import { QuickAddEvent } from "./QuickAddEvent";
 
 type ViewMode = "month" | "week" | "agenda";
 
@@ -60,6 +61,13 @@ export default async function AdminCalendarPage({
     .lte("event_date", rangeEnd)
     .order("event_date", { ascending: true });
 
+  // For Quick Add's "who's this for" dropdown -- same source list as the
+  // full "Add a booking" form.
+  const { data: clients } = await supabase
+    .from("clients")
+    .select("id, first_name, last_name")
+    .order("first_name");
+
   const eventsByDate = new Map<string, CalendarEvent[]>();
   for (const event of (events ?? []) as CalendarEvent[]) {
     const list = eventsByDate.get(event.event_date) ?? [];
@@ -89,9 +97,12 @@ export default async function AdminCalendarPage({
     <div style={{ display: "grid", gap: "1.5rem" }}>
       <EventQuickView />
 
-      <div>
-        <h1 style={{ margin: 0 }}>Calendar</h1>
-        <p style={{ color: "var(--color-muted)" }}>Every booked event — click one for a quick view, or open its full record from there.</p>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", gap: "1rem", flexWrap: "wrap" }}>
+        <div>
+          <h1 style={{ margin: 0 }}>Calendar</h1>
+          <p style={{ color: "var(--color-muted)" }}>Every booked event — click one for a quick view, or open its full record from there.</p>
+        </div>
+        <QuickAddEvent clients={clients ?? []} defaultDate={anchor} />
       </div>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "1rem" }}>

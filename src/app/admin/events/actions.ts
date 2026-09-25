@@ -166,7 +166,7 @@ export async function createEventDirect(formData: FormData) {
     .insert({
       client_id: clientId,
       name,
-      event_type: String(formData.get("eventType") ?? "").trim() || "Other",
+      event_type: String(formData.get("eventType") ?? "").trim() || "other",
       event_date: eventDate,
       status: String(formData.get("status") ?? "booked"),
       venue_name: nullIfEmpty(formData.get("venueName")),
@@ -188,6 +188,69 @@ export async function createEventDirect(formData: FormData) {
   revalidatePath("/staff");
 
   redirect(`/admin/events/${event!.id}`);
+}
+
+/**
+ * Bare-bones event creation for "I know this is happening, put it on the
+ * calendar, I'll fill in the rest later" -- the Quick Add button on the
+ * calendar page. Same required shape as createEventDirect (name, date, and
+ * a client -- events can't exist without one at the DB level) but skips
+ * every optional field, and doesn't redirect anywhere: it's called from a
+ * modal that stays open on the calendar, so it just reports back success
+ * or a plain error message for the modal to show inline.
+ */
+export async function quickAddEvent(
+  formData: FormData
+): Promise<{ id: string } | { error: string }> {
+  await requireAdmin();
+  const supabase = createClient();
+
+  const name = String(formData.get("name") ?? "").trim();
+  const eventDate = String(formData.get("eventDate") ?? "");
+  if (!name || !eventDate) {
+    return { error: "Event name and date are required." };
+  }
+
+  let clientId = String(formData.get("clientId") ?? "");
+  if (!clientId) {
+    const newClientName = String(formData.get("newClientName") ?? "").trim();
+    if (!newClientName) {
+      return { error: "Who's this for? A first name is enough -- you can add the rest later." };
+    }
+    const [firstName, ...rest] = newClientName.split(" ");
+    const { data: newClient, error: clientError } = await supabase
+      .from("clients")
+      .insert({ first_name: firstName, last_name: rest.join(" ") || null })
+      .select("id")
+      .single();
+    if (clientError || !newClient) {
+      return { error: "Couldn't create that client." };
+    }
+    clientId = newClient.id;
+  }
+
+  const { data: event, error: eventError } = await supabase
+    .from("events")
+    .insert({
+      client_id: clientId,
+      name,
+      event_type: "other",
+      event_date: eventDate,
+      status: "booked",
+    })
+    .select("id")
+    .single();
+
+  if (eventError || !event) {
+    return { error: "Couldn't create that event." };
+  }
+
+  revalidatePath("/admin/calendar");
+  revalidatePath("/admin/events");
+  revalidatePath("/admin/clients");
+  revalidatePath("/staff");
+
+  return { id: event.id };
 }
 
 export async function addEventNote(formData: FormData) {
