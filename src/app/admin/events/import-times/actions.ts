@@ -6,6 +6,7 @@ import * as XLSX from "xlsx";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/roles";
 import { zonedTimeToIso } from "@/lib/calendar-dates";
+import { syncEventToGoogle } from "@/lib/google-event-sync";
 
 async function requireAdmin() {
   const user = await getCurrentUser();
@@ -318,6 +319,7 @@ export async function commitStaffTimesImport(rows: CommitRow[]): Promise<{ updat
       errors.push(`${r.eventId}: ${error.message}`);
     } else {
       updated++;
+      await syncEventToGoogle(r.eventId);
     }
   }
 

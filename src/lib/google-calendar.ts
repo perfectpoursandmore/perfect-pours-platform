@@ -144,13 +144,44 @@ export interface BusyBlock {
   end: Date;
 }
 
-/** Reads Faith's busy blocks in [timeMin, timeMax) — never event titles/details. */
+/**
+ * Every calendar in Faith's Google account that she owns or can edit -- her
+ * main calendar plus any extra ones (e.g. a separate "Business" calendar).
+ * Read-only subscriptions like holidays or birthdays are skipped so they
+ * don't block whole days. Falls back to just `fallbackId` if the list can't
+ * be read.
+ */
+async function getOwnedCalendarIds(accessToken: string, fallbackId: string): Promise<string[]> {
+  try {
+    const res = await fetch(
+      "https://www.googleapis.com/calendar/v3/users/me/calendarList?minAccessRole=writer&maxResults=250",
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+    const data = (await res.json()) as { items?: Array<{ id: string; deleted?: boolean }> };
+    const ids = (data.items ?? []).filter((c) => !c.deleted).map((c) => c.id);
+    if (!ids.includes(fallbackId) && fallbackId !== "primary") ids.push(fallbackId);
+    return ids.length > 0 ? ids.slice(0, 50) : [fallbackId]; // freeBusy accepts up to 50
+  } catch (err) {
+    console.error("Couldn't list Google calendars, checking only the main one:", err);
+    return [fallbackId];
+  }
+}
+
+/**
+ * Reads Faith's busy blocks in [timeMin, timeMax) across ALL of her own
+ * calendars -- never event titles/details. Previously this only checked the
+ * single connected calendar, so events on a second calendar (like a
+ * separate business calendar) were invisible to the booking page.
+ */
 export async function getBusyBlocks(
   accessToken: string,
   calendarId: string,
   timeMin: Date,
   timeMax: Date
 ): Promise<BusyBlock[]> {
+  const calendarIds = await getOwnedCalendarIds(accessToken, calendarId);
+
   const res = await fetch("https://www.googleapis.com/calendar/v3/freeBusy", {
     method: "POST",
     headers: {
@@ -160,7 +191,7 @@ export async function getBusyBlocks(
     body: JSON.stringify({
       timeMin: timeMin.toISOString(),
       timeMax: timeMax.toISOString(),
-      items: [{ id: calendarId }],
+      items: calendarIds.map((id) => ({ id })),
     }),
   });
 
@@ -168,10 +199,16 @@ export async function getBusyBlocks(
     throw new Error(`Google freeBusy query failed: ${res.status} ${await res.text()}`);
   }
 
-  const data = await res.json();
-  const busy: Array<{ start: string; end: string }> = data.calendars?.[calendarId]?.busy ?? [];
+  const data = (await res.json()) as {
+    calendars?: Record<string, { busy?: Array<{ start: string; end: string }>; errors?: unknown[] }>;
+  };
 
-  return busy.map((b) => ({ start: new Date(b.start), end: new Date(b.end) }));
+  const busy: BusyBlock[] = [];
+  for (const [id, cal] of Object.entries(data.calendars ?? {})) {
+    if (cal.errors?.length) console.error(`freeBusy error for calendar ${id}:`, cal.errors);
+    for (const b of cal.busy ?? []) busy.push({ start: new Date(b.start), end: new Date(b.end) });
+  }
+  return busy;
 }
 
 /** Creates the consultation call on Faith's calendar so it becomes a busy block too. */

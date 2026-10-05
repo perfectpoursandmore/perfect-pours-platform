@@ -1,3 +1,5 @@
+import { syncEventToGoogle } from "@/lib/google-event-sync";
+
 // Shared by admin server actions (proposal sent, deposit marked received) and
 // the public contract-signing route (uses the service-role client instead,
 // since the person signing hasn't logged in). Both need to update the same
@@ -50,5 +52,6 @@ export async function maybeMarkEventBooked(supabase: SupabaseLike, eventId: stri
 
   if (row?.contract_signed && row?.deposit_paid) {
     await supabase.from("events").update({ status: "booked" }).eq("id", eventId);
+    await syncEventToGoogle(eventId);
   }
 }

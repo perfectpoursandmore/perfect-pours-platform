@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/roles";
 import { EVENT_TYPE_LABELS } from "@/lib/labels";
+import { syncEventToGoogle } from "@/lib/google-event-sync";
 
 async function requireAdmin() {
   const user = await getCurrentUser();
@@ -98,6 +99,7 @@ export async function convertLeadToClientAndEvent(formData: FormData) {
   }
 
   await supabase.from("leads").update({ client_id: clientId, event_id: eventId }).eq("id", id);
+  await syncEventToGoogle(eventId!);
 
   revalidatePath(`/admin/leads/${id}`);
   revalidatePath("/admin/clients");

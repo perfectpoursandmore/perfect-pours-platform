@@ -7,6 +7,7 @@ import { getCurrentUser } from "@/lib/auth/roles";
 import { isEmailConfigured, sendEmail, sendTemplatedEmail } from "@/lib/email";
 import { formatDate, formatDateTime } from "@/lib/labels";
 import { zonedTimeToIso } from "@/lib/calendar-dates";
+import { syncEventToGoogle, removeEventFromGoogle } from "@/lib/google-event-sync";
 
 async function requireAdmin() {
   const user = await getCurrentUser();
@@ -54,6 +55,8 @@ export async function updateEventOverview(formData: FormData) {
     })
     .eq("id", id);
 
+  await syncEventToGoogle(id);
+
   revalidatePath(`/admin/events/${id}`);
   revalidatePath("/admin/events");
 }
@@ -68,6 +71,7 @@ export async function reassignEventClient(formData: FormData) {
   if (!clientId) return;
 
   await supabase.from("events").update({ client_id: clientId }).eq("id", eventId);
+  await syncEventToGoogle(eventId);
 
   revalidatePath(`/admin/events/${eventId}`);
   revalidatePath("/admin/events");
@@ -107,6 +111,7 @@ export async function createClientAndAssignToEvent(formData: FormData) {
   }
 
   await supabase.from("events").update({ client_id: newClient!.id }).eq("id", eventId);
+  await syncEventToGoogle(eventId);
 
   revalidatePath(`/admin/events/${eventId}`);
   revalidatePath("/admin/events");
@@ -183,6 +188,8 @@ export async function createEventDirect(formData: FormData) {
     redirect("/admin/events/new?error=Couldn't create that event.");
   }
 
+  await syncEventToGoogle(event!.id);
+
   revalidatePath("/admin/events");
   revalidatePath("/admin/clients");
   revalidatePath("/staff");
@@ -244,6 +251,8 @@ export async function quickAddEvent(
   if (eventError || !event) {
     return { error: "Couldn't create that event." };
   }
+
+  await syncEventToGoogle(event.id);
 
   revalidatePath("/admin/calendar");
   revalidatePath("/admin/events");
@@ -468,6 +477,9 @@ export async function deleteEvent(formData: FormData) {
   // leads.event_id, which has no cascade — clear that link first or the
   // delete below fails with a foreign-key error.
   await supabase.from("leads").update({ event_id: null }).eq("event_id", id);
+
+  const { data: toDelete } = await supabase.from("events").select("google_event_id").eq("id", id).single();
+  await removeEventFromGoogle(toDelete?.google_event_id as string | null | undefined);
 
   await supabase.from("events").delete().eq("id", id);
 

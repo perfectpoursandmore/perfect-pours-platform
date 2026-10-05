@@ -1,10 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
-import { disconnectGoogleCalendar } from "./actions";
+import { disconnectGoogleCalendar, syncAllEventsNow } from "./actions";
 
 export default async function CalendarSettingsPage({
   searchParams,
 }: {
-  searchParams: { connected?: string; error?: string };
+  searchParams: { connected?: string; error?: string; synced?: string };
 }) {
   const supabase = createClient();
   const { data: connection } = await supabase
@@ -20,14 +20,21 @@ export default async function CalendarSettingsPage({
       <div>
         <h1 style={{ margin: 0 }}>Google Calendar</h1>
         <p style={{ color: "var(--color-muted)" }}>
-          Lets the consultation scheduler check your real calendar for conflicts.
-          Prospective clients only ever see &quot;unavailable&quot; — never what the
-          appointment is or any other detail.
+          Lets the consultation scheduler check your real calendar for conflicts,
+          and puts your events on it automatically: booked events show normally,
+          inquiries show as &quot;HOLD:&quot;, and cancelled or deleted events are
+          removed. Prospective clients only ever see &quot;unavailable&quot; — never
+          what the appointment is or any other detail.
         </p>
       </div>
 
       {searchParams.connected && (
         <p style={{ color: "#2a7a2a" }}>Google Calendar connected successfully.</p>
+      )}
+      {searchParams.synced && (
+        <p style={{ color: "#2a7a2a" }}>
+          Synced {searchParams.synced} upcoming event(s) to Google Calendar.
+        </p>
       )}
       {searchParams.error && <p style={{ color: "#a33" }}>{searchParams.error}</p>}
 
@@ -39,6 +46,15 @@ export default async function CalendarSettingsPage({
               <strong>{connection?.google_calendar_id}</strong> since{" "}
               {new Date(connection!.connected_at as string).toLocaleDateString()}.
             </p>
+            <form action={syncAllEventsNow} style={{ marginBottom: "0.75rem" }}>
+              <button type="submit" className="button">
+                Sync all upcoming events now
+              </button>
+              <p style={{ color: "var(--color-muted)", fontSize: "0.9rem", margin: "0.5rem 0 0" }}>
+                New and edited events sync on their own. Use this to catch up
+                events made before syncing was turned on, or if anything looks off.
+              </p>
+            </form>
             <form action={disconnectGoogleCalendar}>
               <button
                 type="submit"
