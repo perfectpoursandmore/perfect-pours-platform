@@ -7,8 +7,7 @@ export default function InquirePage() {
     <main style={{ padding: "2rem 1rem", maxWidth: 640, margin: "0 auto" }}>
       <h1>Tell us about your event</h1>
       <p style={{ color: "var(--color-muted)", maxWidth: 560 }}>
-        Share a few details and we&apos;ll email you personalized pricing for your event. No call
-        needed until you&apos;re ready to book.
+        Share a few details and we&apos;ll email you personalized pricing for your event.
       </p>
       <InquiryForm />
     </main>
