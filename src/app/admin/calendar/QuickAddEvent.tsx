@@ -10,8 +10,16 @@ type Client = { id: string; first_name: string; last_name: string | null };
 // never requires leaving it. Only asks for what the database actually
 // needs (a name, a date, and a client) -- everything else on the full
 // event page (address, pricing, timing, staff) is left for later.
-export function QuickAddEvent({ clients, defaultDate }: { clients: Client[]; defaultDate: string }) {
-  const [open, setOpen] = useState(false);
+export function QuickAddEvent({
+  clients,
+  defaultDate,
+  autoOpen = false,
+}: {
+  clients: Client[];
+  defaultDate: string;
+  autoOpen?: boolean; // the Home Screen app opens straight into this
+}) {
+  const [open, setOpen] = useState(autoOpen);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -140,6 +148,22 @@ export function QuickAddEvent({ clients, defaultDate }: { clients: Client[]; def
                 />
               </div>
 
+              <div>
+                <span style={{ display: "block", fontSize: "0.85rem", color: "var(--color-muted)", marginBottom: "0.35rem" }}>
+                  Status
+                </span>
+                <div style={{ display: "grid", gap: "0.35rem" }}>
+                  <label style={radioLabel}>
+                    <input type="radio" name="status" value="inquiry" defaultChecked />
+                    Hold, not confirmed yet
+                  </label>
+                  <label style={radioLabel}>
+                    <input type="radio" name="status" value="booked" />
+                    Booked
+                  </label>
+                </div>
+              </div>
+
               <button type="submit" className="button" disabled={busy} style={{ justifySelf: "start" }}>
                 {busy ? "Adding…" : "Add to calendar"}
               </button>
@@ -150,6 +174,15 @@ export function QuickAddEvent({ clients, defaultDate }: { clients: Client[]; def
     </>
   );
 }
+
+const radioLabel: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "0.5rem",
+  margin: 0,
+  color: "var(--color-text)",
+  fontSize: "0.95rem",
+};
 
 const inputStyle: CSSProperties = {
   width: "100%",

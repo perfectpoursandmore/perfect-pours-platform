@@ -2,14 +2,15 @@ import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatMoney, formatDate } from "@/lib/labels";
 import { SignaturePad } from "@/components/SignaturePad";
-import { signContract } from "./actions";
+import { signContract, requestAddons } from "./actions";
+import { ADD_ONS, PACKAGE, TIMING_POLICIES } from "@/lib/price-list";
 
 export default async function ClientDocumentsPage({
   params,
   searchParams,
 }: {
   params: { token: string };
-  searchParams: { error?: string };
+  searchParams: { error?: string; addons?: string };
 }) {
   const supabase = createAdminClient();
 
@@ -48,15 +49,24 @@ export default async function ClientDocumentsPage({
     .single();
 
   const client = Array.isArray(event.clients) ? event.clients[0] : event.clients;
-  const ready = proposal && contract && contract.status !== "unsent";
+  // Pricing can go out on its own, before any contract exists.
+  const contractReady = Boolean(contract && contract.status !== "unsent");
+  const pricingReady = Boolean(proposal && (proposal.status === "sent" || contractReady));
+  const ready = pricingReady || contractReady;
+  const hasPackage = (items ?? []).some((i) => String(i.description).startsWith(PACKAGE.name));
+  const requested: string[] = proposal?.requested_addons ?? [];
+  const contractSigned = contract?.status === "signed";
 
   return (
     <main style={{ padding: "2rem 1.5rem", maxWidth: 640, margin: "0 auto" }}>
-      <h1>{event.name}</h1>
+      <p style={{ margin: 0, color: "var(--color-accent)", fontWeight: 600, letterSpacing: "0.04em", fontSize: "0.85rem" }}>
+        PERFECT POURS &amp; MORE
+      </p>
+      <h1 style={{ marginTop: "0.25rem" }}>{event.name}</h1>
 
       {!ready ? (
         <p style={{ color: "var(--color-muted)" }}>
-          Your proposal and contract aren&apos;t ready yet — check back soon, or reach out to{" "}
+          Your pricing isn&apos;t ready yet — check back soon, or reach out to{" "}
           <a href="mailto:faith@perfectpoursandmore.com">faith@perfectpoursandmore.com</a> if you
           were expecting this link to be active.
         </p>
@@ -64,35 +74,115 @@ export default async function ClientDocumentsPage({
         <div style={{ display: "grid", gap: "1.5rem" }}>
           {searchParams.error && <p style={{ color: "#a33" }}>{searchParams.error}</p>}
 
-          <section className="card">
-            <h2 style={{ marginTop: 0 }}>Proposal</h2>
-            <p style={{ color: "var(--color-muted)" }}>
-              {client?.first_name} {client?.last_name} — {formatDate(event.event_date)}
-            </p>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <tbody>
-                {(items ?? []).map((item) => (
-                  <tr key={item.id} style={{ borderBottom: "1px solid var(--color-border)" }}>
-                    <td style={{ padding: "0.5rem 0", whiteSpace: "pre-line" }}>
-                      {item.description} {item.quantity > 1 ? `(x${item.quantity})` : ""}
-                    </td>
-                    <td style={{ padding: "0.5rem 0", textAlign: "right" }}>{formatMoney(item.line_total)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <div style={{ marginTop: "0.75rem", display: "grid", gap: "0.25rem" }}>
-              <SummaryRow label="Subtotal" value={formatMoney(proposal!.subtotal)} />
-              {Number(proposal!.discount_amount) > 0 && (
-                <SummaryRow label="Discount" value={`- ${formatMoney(proposal!.discount_amount)}`} />
-              )}
-              {Number(proposal!.fee_amount) > 0 && <SummaryRow label="Fee" value={formatMoney(proposal!.fee_amount)} />}
-              {Number(proposal!.tax_amount) > 0 && <SummaryRow label="Tax" value={formatMoney(proposal!.tax_amount)} />}
-              <SummaryRow label="Total" value={formatMoney(proposal!.total_amount)} strong />
-              <SummaryRow label="Deposit due" value={formatMoney(proposal!.deposit_amount)} />
-            </div>
-          </section>
+          {pricingReady && proposal && (
+            <>
+              <section className="card">
+                <p style={{ margin: 0, color: "var(--color-muted)", fontSize: "0.9rem" }}>
+                  {client?.first_name} {client?.last_name} · {formatDate(event.event_date)}
+                  {event.guest_count ? ` · ${event.guest_count} guests` : ""}
+                </p>
+                <h2 style={{ margin: "0.35rem 0 0" }}>Your personalized pricing</h2>
+                {proposal.intro_note && (
+                  <p style={{ margin: "0.85rem 0 0", whiteSpace: "pre-line", lineHeight: 1.5 }}>{proposal.intro_note}</p>
+                )}
 
+                <div style={{ display: "grid", gap: "1.25rem", marginTop: "1.25rem" }}>
+                  {(items ?? []).map((item) => (
+                    <LineItem
+                      key={item.id}
+                      description={String(item.description)}
+                      total={formatMoney(item.line_total)}
+                      note={item.note as string | null}
+                    />
+                  ))}
+                </div>
+
+                <div style={{ marginTop: "1.25rem", paddingTop: "0.75rem", borderTop: "1px solid var(--color-border)", display: "grid", gap: "0.25rem" }}>
+                  {Number(proposal.discount_amount) > 0 && (
+                    <SummaryRow label="Discount" value={`- ${formatMoney(proposal.discount_amount)}`} />
+                  )}
+                  {Number(proposal.fee_amount) > 0 && <SummaryRow label="Fee" value={formatMoney(proposal.fee_amount)} />}
+                  {Number(proposal.tax_amount) > 0 && <SummaryRow label="Tax" value={formatMoney(proposal.tax_amount)} />}
+                  <SummaryRow label="Total" value={formatMoney(proposal.total_amount)} strong />
+                  {contractReady && Number(proposal.deposit_amount) > 0 && (
+                    <SummaryRow label="Retainer to book" value={formatMoney(proposal.deposit_amount)} />
+                  )}
+                  {Number(proposal.tax_amount) === 0 && (
+                    <p style={{ margin: "0.25rem 0 0", fontSize: "0.82rem", color: "var(--color-muted)" }}>Plus applicable sales tax.</p>
+                  )}
+                </div>
+
+                {hasPackage && (
+                  <div style={{ marginTop: "1.25rem", display: "grid", gap: "0.5rem", fontSize: "0.92rem" }}>
+                    <p style={{ margin: 0, color: "var(--color-muted)" }}>{PACKAGE.fullBarNote}</p>
+                    <strong style={{ marginTop: "0.5rem" }}>Customize your package</strong>
+                    <ul style={{ margin: 0, paddingLeft: "1.1rem", display: "grid", gap: "0.25rem" }}>
+                      {PACKAGE.customize.map((c) => (
+                        <li key={c}>{c}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </section>
+
+              {!contractSigned && (
+                <section className="card" id="addons">
+                  <h2 style={{ marginTop: 0 }}>Add-ons</h2>
+                  <p style={{ marginTop: "-0.25rem", color: "var(--color-muted)", fontSize: "0.92rem" }}>
+                    Pricing available upon request. Check anything you&apos;re interested in and we&apos;ll add
+                    pricing for your event.
+                  </p>
+                  {searchParams.addons === "requested" && (
+                    <p style={{ color: "#2a7a2a" }}>✓ Got it! We&apos;ll add pricing for those and let you know.</p>
+                  )}
+                  <form action={requestAddons} style={{ display: "grid", gap: "0.5rem" }}>
+                    <input type="hidden" name="token" value={params.token} />
+                    {ADD_ONS.map((a) => (
+                      <label key={a.value} style={choiceStyle}>
+                        <input type="checkbox" name="addons" value={a.value} defaultChecked={requested.includes(a.value)} style={{ marginTop: 3 }} />
+                        <span>{a.label}</span>
+                      </label>
+                    ))}
+                    <label htmlFor="addonsNote" style={{ marginTop: "0.5rem" }}>
+                      Details (optional), e.g. how many custom cups, your theme
+                    </label>
+                    <textarea id="addonsNote" name="addonsNote" rows={2} defaultValue={proposal.addons_note ?? ""} style={textareaStyle} />
+                    <button
+                      type="submit"
+                      style={{ justifySelf: "start", background: "none", border: "1px solid var(--color-accent)", color: "var(--color-accent)", borderRadius: 8, padding: "0.5rem 1rem", cursor: "pointer", fontSize: "0.95rem" }}
+                    >
+                      {requested.length > 0 ? "Update my add-on request" : "Request add-on pricing"}
+                    </button>
+                  </form>
+                </section>
+              )}
+
+              <section className="card">
+                <h2 style={{ marginTop: 0 }}>How timing works</h2>
+                <ul style={{ margin: 0, paddingLeft: "1.1rem", display: "grid", gap: "0.5rem", lineHeight: 1.45 }}>
+                  {TIMING_POLICIES.map((t) => (
+                    <li key={t}>{t}</li>
+                  ))}
+                </ul>
+              </section>
+
+              {!contractReady && (
+                <section className="card" style={{ textAlign: "center", borderColor: "var(--color-accent)" }}>
+                  <h2 style={{ marginTop: 0 }}>Ready to book?</h2>
+                  <p style={{ color: "var(--color-muted)", marginTop: 0 }}>
+                    Pick a time for a quick planning call. We&apos;ll go over the details, then send your
+                    agreement to lock in your date.
+                  </p>
+                  <a href="/book" className="button">
+                    Schedule my planning call
+                  </a>
+                </section>
+              )}
+            </>
+          )}
+
+          {contractReady && (
+            <>
           <section className="card">
             <h2 style={{ marginTop: 0 }}>Contract</h2>
             <pre
@@ -159,6 +249,8 @@ export default async function ClientDocumentsPage({
               <p style={{ color: "#2a7a2a", margin: "0.75rem 0 0" }}>✓ Balance paid in full — thank you!</p>
             )}
           </section>
+            </>
+          )}
         </div>
       )}
 
@@ -178,3 +270,50 @@ function SummaryRow({ label, value, strong }: { label: string; value: string; st
     </div>
   );
 }
+
+/** First line = title; "• " lines = bullet list; other lines = paragraph. */
+function LineItem({ description, total, note }: { description: string; total: string; note: string | null }) {
+  const [title, ...rest] = description.split("\n");
+  const bullets = rest.filter((l) => l.startsWith("• ")).map((l) => l.slice(2));
+  const text = rest.filter((l) => !l.startsWith("• ") && l.trim());
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", alignItems: "baseline" }}>
+        <strong style={{ fontSize: "1.02rem" }}>{title}</strong>
+        <strong style={{ whiteSpace: "nowrap" }}>{total}</strong>
+      </div>
+      {text.map((t) => (
+        <p key={t} style={{ margin: "0.35rem 0 0", color: "var(--color-muted)", lineHeight: 1.45 }}>
+          {t}
+        </p>
+      ))}
+      {bullets.length > 0 && (
+        <ul style={{ margin: "0.45rem 0 0", paddingLeft: "1.1rem", display: "grid", gap: "0.2rem", fontSize: "0.93rem" }}>
+          {bullets.map((b) => (
+            <li key={b}>{b}</li>
+          ))}
+        </ul>
+      )}
+      {note && <p style={{ margin: "0.45rem 0 0", fontSize: "0.88rem", fontStyle: "italic", color: "var(--color-muted)" }}>{note}</p>}
+    </div>
+  );
+}
+
+const choiceStyle = {
+  display: "flex",
+  alignItems: "flex-start",
+  gap: "0.6rem",
+  margin: 0,
+  fontSize: "0.95rem",
+  color: "var(--color-text)",
+  cursor: "pointer",
+} as const;
+
+const textareaStyle = {
+  width: "100%",
+  padding: "0.55rem 0.7rem",
+  borderRadius: 8,
+  border: "1px solid var(--color-border)",
+  fontFamily: "inherit",
+  fontSize: "0.95rem",
+} as const;

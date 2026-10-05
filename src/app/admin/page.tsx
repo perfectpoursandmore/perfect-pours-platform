@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { LEAD_STATUS_LABELS, formatDate, formatDateTime } from "@/lib/labels";
+import { customQuoteReason } from "@/lib/price-list";
 import { addDashboardNote, removeDashboardNote, addTodo, toggleTodo, removeTodo } from "./actions";
 
 function todayISO() {
@@ -10,6 +11,31 @@ function daysFromNowISO(days: number) {
   const d = new Date();
   d.setDate(d.getDate() + days);
   return d.toISOString().slice(0, 10);
+}
+
+type FollowUpRow = {
+  id: string;
+  name: string;
+  event_date: string;
+  created_at: string;
+  event_type: string | null;
+  guest_count: number | null;
+  proposals:
+    | { sent_at: string | null; status: string; requested_addons: string[] | null; addons_handled_at: string | null }[]
+    | null;
+};
+
+const DAY_MS = 86400000;
+const CHECK_IN_AFTER_DAYS = 3;
+
+function daysSince(iso: string): number {
+  return Math.floor((Date.now() - new Date(iso).getTime()) / DAY_MS);
+}
+
+function ago(days: number): string {
+  if (days <= 0) return "today";
+  if (days === 1) return "yesterday";
+  return `${days} days ago`;
 }
 
 type TodoRow = {
@@ -23,8 +49,14 @@ type TodoRow = {
 export default async function AdminDashboardPage() {
   const supabase = createClient();
 
-  const [{ data: thisWeeksEvents }, { data: upcomingConsultations }, { data: attentionLeads }, { data: dashboardNotes }, { data: todos }] =
-    await Promise.all([
+  const [
+    { data: thisWeeksEvents },
+    { data: upcomingConsultations },
+    { data: attentionLeads },
+    { data: dashboardNotes },
+    { data: todos },
+    { data: openHolds },
+  ] = await Promise.all([
       supabase
         .from("events")
         .select("id, name, event_date, event_type")
@@ -43,6 +75,8 @@ export default async function AdminDashboardPage() {
         .from("leads")
         .select("id, first_name, last_name, status")
         .in("status", ["new_inquiry", "consultation_completed", "quote_needed"])
+        // Leads already turned into an event are tracked under "Needs follow-up" instead.
+        .is("event_id", null)
         .order("created_at", { ascending: false })
         .limit(10),
       supabase.from("dashboard_notes").select("id, note, created_at").order("created_at", { ascending: false }),
@@ -51,7 +85,39 @@ export default async function AdminDashboardPage() {
         .select("id, list_type, item, is_done, created_at")
         .order("is_done", { ascending: true })
         .order("created_at", { ascending: true }),
+      supabase
+        .from("events")
+        .select("id, name, status, event_date, created_at, event_type, guest_count, proposals(sent_at, status, requested_addons, addons_handled_at)")
+        .in("status", ["inquiry", "booked"])
+        .gte("event_date", todayISO())
+        .order("event_date"),
     ]);
+
+  // Every HOLD still waiting on something: either pricing hasn't gone out
+  // yet, or it went out a few days ago with no answer. This is the list that
+  // keeps a request from quietly sitting for two weeks.
+  const upcoming = (openHolds ?? []) as unknown as (FollowUpRow & { status?: string })[];
+  // Add-on requests can come in before OR after booking.
+  const addonRequests = upcoming.filter((e) =>
+    (e.proposals ?? []).some((p) => (p.requested_addons ?? []).length > 0 && !p.addons_handled_at)
+  );
+  const holdIds = new Set(
+    ((openHolds ?? []) as unknown as { id: string; status?: string }[]).filter((e) => e.status !== "booked").map((e) => e.id)
+  );
+  const holds = upcoming.filter((e) => holdIds.has(e.id));
+  const needsPricing = holds
+    .filter((e) => !(e.proposals ?? []).some((p) => p.sent_at))
+    .map((e) => ({ ...e, waiting: daysSince(e.created_at), customQuote: customQuoteReason(e.event_type, e.guest_count) }));
+  const needsCheckIn = holds
+    .map((e) => {
+      const sent = (e.proposals ?? [])
+        .map((p) => p.sent_at)
+        .filter((d): d is string => Boolean(d))
+        .sort()
+        .pop();
+      return sent ? { ...e, sentDaysAgo: daysSince(sent) } : null;
+    })
+    .filter((e): e is FollowUpRow & { sentDaysAgo: number } => e !== null && e.sentDaysAgo >= CHECK_IN_AFTER_DAYS);
 
   const allTodos = (todos ?? []) as TodoRow[];
   const dailyTodos = allTodos.filter((t) => t.list_type === "daily");
@@ -60,6 +126,67 @@ export default async function AdminDashboardPage() {
   return (
     <div style={{ display: "grid", gap: "1.5rem" }}>
       <h1 style={{ margin: 0 }}>Dashboard</h1>
+
+      <div className="card" style={{ borderColor: needsPricing.length + needsCheckIn.length + addonRequests.length > 0 ? "var(--color-accent)" : undefined }}>
+        <h2 style={{ marginTop: 0, fontSize: "1rem" }}>Needs follow-up</h2>
+        {needsPricing.length + needsCheckIn.length + addonRequests.length === 0 ? (
+          <p style={{ color: "var(--color-muted)", margin: 0 }}>You&apos;re all caught up. Every hold has pricing out and isn&apos;t overdue for a check-in.</p>
+        ) : (
+          <div style={{ display: "grid", gap: "1rem" }}>
+            {needsPricing.length > 0 && (
+              <div>
+                <h3 style={{ margin: "0 0 0.4rem", fontSize: "0.9rem" }}>Send pricing</h3>
+                <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: "0.4rem" }}>
+                  {needsPricing.map((e) => (
+                    <li key={e.id}>
+                      <a href={`/admin/events/${e.id}/booking`}>{e.name}</a>{" "}
+                      <span style={{ color: "var(--color-muted)" }}>
+                        — event {formatDate(e.event_date)} · came in {ago(e.waiting)}
+                      </span>
+                      {e.customQuote && (
+                        <span style={{ marginLeft: "0.4rem", fontSize: "0.78rem", padding: "0.05rem 0.4rem", borderRadius: 4, background: "#f1e9dd" }}>
+                          custom quote
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {addonRequests.length > 0 && (
+              <div>
+                <h3 style={{ margin: "0 0 0.4rem", fontSize: "0.9rem" }}>Price requested add-ons</h3>
+                <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: "0.4rem" }}>
+                  {addonRequests.map((e) => (
+                    <li key={e.id}>
+                      <a href={`/admin/events/${e.id}/booking`}>{e.name}</a>{" "}
+                      <span style={{ color: "var(--color-muted)" }}>— event {formatDate(e.event_date)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {needsCheckIn.length > 0 && (
+              <div>
+                <h3 style={{ margin: "0 0 0.4rem", fontSize: "0.9rem" }}>Check in (no answer yet)</h3>
+                <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: "0.4rem" }}>
+                  {needsCheckIn.map((e) => (
+                    <li key={e.id}>
+                      <a href={`/admin/events/${e.id}`}>{e.name}</a>{" "}
+                      <span style={{ color: "var(--color-muted)" }}>
+                        — event {formatDate(e.event_date)} · pricing sent {ago(e.sentDaysAgo)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            <p style={{ margin: 0, fontSize: "0.82rem", color: "var(--color-muted)" }}>
+              A hold leaves this list once it&apos;s marked Booked or Cancelled.
+            </p>
+          </div>
+        )}
+      </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem" }}>
         <div className="card">
@@ -183,10 +310,6 @@ export default async function AdminDashboardPage() {
         )}
       </div>
 
-      <p style={{ color: "var(--color-muted)", fontSize: "0.85rem" }}>
-        Proposal/contract/deposit indicators join this dashboard in Phase 5-6, once those
-        workflows exist.
-      </p>
     </div>
   );
 }

@@ -21,7 +21,7 @@ type ViewMode = "month" | "week" | "agenda";
 export default async function AdminCalendarPage({
   searchParams,
 }: {
-  searchParams: { view?: string; date?: string };
+  searchParams: { view?: string; date?: string; quickadd?: string };
 }) {
   const supabase = createClient();
   const view: ViewMode =
@@ -30,10 +30,10 @@ export default async function AdminCalendarPage({
   const today = todayDateString();
   const anchor = searchParams.date && /^\d{4}-\d{2}-\d{2}$/.test(searchParams.date) ? searchParams.date : today;
 
-  // Only real bookings belong on the master calendar — not bare inquiries
-  // that haven't been won yet, and not cancelled ones (still fetched so we
-  // can show them crossed out rather than making a slot look silently open).
-  const relevantStatuses = ["booked", "completed", "cancelled"];
+  // Booked events, plus inquiries shown as HOLDs so a pending request still
+  // makes its date look taken (nobody books over it). Cancelled ones are
+  // fetched so they show crossed out rather than silently open.
+  const relevantStatuses = ["booked", "completed", "cancelled", "inquiry"];
 
   let rangeStart = anchor;
   let rangeEnd = anchor;
@@ -100,9 +100,9 @@ export default async function AdminCalendarPage({
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", gap: "1rem", flexWrap: "wrap" }}>
         <div>
           <h1 style={{ margin: 0 }}>Calendar</h1>
-          <p style={{ color: "var(--color-muted)" }}>Every booked event — click one for a quick view, or open its full record from there.</p>
+          <p style={{ color: "var(--color-muted)" }}>Every booked event, plus HOLDs for requests that aren&apos;t confirmed yet. Click one for a quick view.</p>
         </div>
-        <QuickAddEvent clients={clients ?? []} defaultDate={anchor} />
+        <QuickAddEvent clients={clients ?? []} defaultDate={anchor} autoOpen={searchParams.quickadd === "1"} />
       </div>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "1rem" }}>

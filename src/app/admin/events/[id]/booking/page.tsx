@@ -11,7 +11,13 @@ import {
   markBalanceReceived,
   createInvoiceDraft,
   refreshInvoiceStatus,
+  autoBuildProposal,
+  saveIntroNote,
+  sendPricing,
+  markAddonsHandled,
 } from "./actions";
+import { buildDraftProposal } from "@/lib/auto-proposal";
+import { ADD_ONS } from "@/lib/price-list";
 import { AddProposalItemFields } from "./AddProposalItemFields";
 
 export default async function EventBookingPage({
@@ -19,7 +25,7 @@ export default async function EventBookingPage({
   searchParams,
 }: {
   params: { id: string };
-  searchParams: { error?: string };
+  searchParams: { error?: string; pricingSent?: string };
 }) {
   const supabase = createClient();
   const eventId = params.id;
@@ -83,7 +89,18 @@ export default async function EventBookingPage({
         .order("sort_order")
     : { data: [] };
 
-  const { data: eventRow } = await supabase.from("events").select("documents_token").eq("id", eventId).single();
+  const { data: eventRow } = await supabase
+    .from("events")
+    .select("documents_token, event_type, guest_count, services_interested, service_style, dishware, extra_help, staff_arrival_time, staff_end_time")
+    .eq("id", eventId)
+    .single();
+
+  const draft = eventRow ? buildDraftProposal(eventRow) : null;
+  const pricingSent = proposal?.status === "sent";
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://perfect-pours-platform.vercel.app";
+  const clientLink = eventRow ? `${appUrl}/client/${eventRow.documents_token}` : "";
+  const requestedAddons: string[] = proposal?.requested_addons ?? [];
+  const addonsPending = requestedAddons.length > 0 && !proposal?.addons_handled_at;
 
   return (
     <div style={{ display: "grid", gap: "1.5rem" }}>
@@ -105,75 +122,134 @@ export default async function EventBookingPage({
         )}
       </div>
 
+      <div className="card" style={{ display: "grid", gap: "1rem", borderColor: !pricingSent ? "var(--color-accent)" : undefined }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: "1rem" }}>Step 1: Send pricing</h2>
+          <p style={{ margin: "0.25rem 0 0", fontSize: "0.85rem", color: "var(--color-muted)" }}>
+            Build the proposal from the event details, check it over, then send the client their
+            personalized pricing page. The contract comes later, after your planning call.
+          </p>
+        </div>
+
+        {searchParams.pricingSent && (
+          <p style={{ margin: 0, color: "#2a7a2a" }}>
+            {searchParams.pricingSent === "emailed"
+              ? "✓ Pricing sent. The client got an email with their link."
+              : "✓ Pricing marked as sent. Copy the link below and text or email it to the client."}
+          </p>
+        )}
+
+        {draft && draft.headsUps.length > 0 && (
+          <div style={{ background: "#fff8ec", border: "1px solid #ecd9b5", borderRadius: 8, padding: "0.75rem 1rem" }}>
+            <strong style={{ fontSize: "0.9rem" }}>Heads up (only you see this)</strong>
+            <ul style={{ margin: "0.4rem 0 0", paddingLeft: "1.1rem", fontSize: "0.9rem", display: "grid", gap: "0.25rem" }}>
+              {draft.headsUps.map((h) => (
+                <li key={h}>{h}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {!pricingSent && proposal && !draft?.customQuote && (
+          <form action={autoBuildProposal}>
+            <input type="hidden" name="eventId" value={eventId} />
+            <input type="hidden" name="proposalId" value={proposal.id} />
+            <button type="submit" className="button">
+              {(items ?? []).length > 0 ? "Rebuild proposal from event details" : "Build proposal from event details"}
+            </button>
+            {(items ?? []).length > 0 && (
+              <span style={{ marginLeft: "0.75rem", fontSize: "0.85rem", color: "var(--color-muted)" }}>
+                Replaces the lines below.
+              </span>
+            )}
+          </form>
+        )}
+
+        {proposal && (
+          <form action={saveIntroNote} style={{ display: "grid", gap: "0.5rem" }}>
+            <input type="hidden" name="eventId" value={eventId} />
+            <input type="hidden" name="proposalId" value={proposal.id} />
+            <label htmlFor="introNote">Personal note at the top of their pricing page (optional)</label>
+            <textarea
+              id="introNote"
+              name="introNote"
+              rows={3}
+              defaultValue={proposal.intro_note ?? ""}
+              placeholder="e.g. Looking forward to making your wife's birthday fun and stress-free!"
+              style={{ ...selectStyle, fontFamily: "inherit", fontSize: "0.95rem" }}
+            />
+            <button
+              type="submit"
+              style={{ justifySelf: "start", background: "none", border: "1px solid var(--color-border)", borderRadius: 8, padding: "0.45rem 0.9rem", cursor: "pointer" }}
+            >
+              Save note
+            </button>
+          </form>
+        )}
+
+        {proposal && !pricingSent && (
+          <form action={sendPricing} style={{ display: "grid", gap: "0.6rem", borderTop: "1px solid var(--color-border)", paddingTop: "1rem" }}>
+            <input type="hidden" name="eventId" value={eventId} />
+            <input type="hidden" name="proposalId" value={proposal.id} />
+            {isEmailConfigured() && (
+              <label style={{ display: "flex", gap: "0.5rem", alignItems: "center", fontSize: "0.9rem", margin: 0, color: "var(--color-text)" }}>
+                <input type="checkbox" name="emailClient" defaultChecked />
+                Email the client their link
+              </label>
+            )}
+            <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
+              <button type="submit" className="button">
+                Send pricing
+              </button>
+              <a href={clientLink} target="_blank" rel="noreferrer" style={{ fontSize: "0.9rem" }}>
+                Preview what they&apos;ll see
+              </a>
+            </div>
+          </form>
+        )}
+
+        {pricingSent && (
+          <div style={{ fontSize: "0.9rem", display: "grid", gap: "0.35rem" }}>
+            <span>
+              Pricing sent{proposal?.sent_at ? ` ${new Date(proposal.sent_at).toLocaleDateString()}` : ""}. Their link (handy for texting):
+            </span>
+            <code style={{ overflowWrap: "anywhere" }}>{clientLink}</code>
+          </div>
+        )}
+
+        {requestedAddons.length > 0 && (
+          <div style={{ background: addonsPending ? "#fff8ec" : "#faf9f7", border: "1px solid var(--color-border)", borderRadius: 8, padding: "0.75rem 1rem" }}>
+            <strong style={{ fontSize: "0.9rem" }}>
+              {addonsPending ? "The client requested add-ons. Add their prices below." : "Add-ons requested (handled)"}
+            </strong>
+            <ul style={{ margin: "0.4rem 0", paddingLeft: "1.1rem", fontSize: "0.9rem" }}>
+              {requestedAddons.map((a) => (
+                <li key={a}>{ADD_ONS.find((o) => o.value === a)?.label ?? a}</li>
+              ))}
+            </ul>
+            {proposal?.addons_note && <p style={{ margin: "0 0 0.5rem", fontSize: "0.9rem" }}>Their note: {proposal.addons_note}</p>}
+            {addonsPending && proposal && (
+              <form action={markAddonsHandled}>
+                <input type="hidden" name="eventId" value={eventId} />
+                <input type="hidden" name="proposalId" value={proposal.id} />
+                <button
+                  type="submit"
+                  style={{ background: "none", border: "1px solid var(--color-border)", borderRadius: 8, padding: "0.4rem 0.8rem", cursor: "pointer" }}
+                >
+                  Mark as handled
+                </button>
+              </form>
+            )}
+          </div>
+        )}
+      </div>
+
       {financials?.qbo_sync_error && (
         <p style={{ color: "#a33", margin: 0 }}>QuickBooks: {financials.qbo_sync_error}</p>
       )}
 
       <div className="card">
-        <h2 style={{ marginTop: 0, fontSize: "1rem" }}>Invoice</h2>
-        <p style={{ marginTop: "-0.5rem", marginBottom: "1rem", fontSize: "0.85rem", color: "var(--color-muted)" }}>
-          One QuickBooks invoice for the full total, linked to this event automatically. It includes
-          a note asking for the retainer amount up front, and if QuickBooks Payments has &quot;Allow
-          partial payments&quot; turned on (Settings → Payments, in QuickBooks itself), the client can
-          pay just that amount now and the rest later. This app only creates the invoice — you
-          review it and send it yourself from inside QuickBooks.
-        </p>
-        {!qboConnected ? (
-          <p style={{ color: "var(--color-muted)" }}>
-            <a href="/admin/settings/quickbooks">Connect QuickBooks</a> to create a linked invoice
-            there, or mark payments received manually below.
-          </p>
-        ) : financials?.balance_paid ? (
-          <p style={{ color: "#2a7a2a", margin: 0 }}>✓ Paid in full.</p>
-        ) : financials?.invoice_id ? (
-          <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
-            <span style={{ color: "var(--color-muted)", fontSize: "0.9rem" }}>
-              Invoice created in QuickBooks and linked to this event.
-              {financials.deposit_paid ? " Retainer received, balance outstanding." : " Review it in QuickBooks and send it from there whenever you're ready."}
-            </span>
-            <form action={refreshInvoiceStatus}>
-              <input type="hidden" name="eventId" value={eventId} />
-              <button type="submit" className="button">
-                Check payment status
-              </button>
-            </form>
-          </div>
-        ) : (
-          <form action={createInvoiceDraft}>
-            <input type="hidden" name="eventId" value={eventId} />
-            <button type="submit" className="button">
-              Create invoice in QuickBooks
-            </button>
-          </form>
-        )}
-        <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", marginTop: "0.75rem" }}>
-          {!financials?.deposit_paid && (
-            <form action={markDepositReceived}>
-              <input type="hidden" name="eventId" value={eventId} />
-              <button
-                type="submit"
-                style={{ background: "none", border: "1px solid var(--color-border)", borderRadius: 8, padding: "0.5rem 0.9rem", cursor: "pointer" }}
-              >
-                Mark retainer received manually (cash/check/Zelle)
-              </button>
-            </form>
-          )}
-          {!financials?.balance_paid && (
-            <form action={markBalanceReceived}>
-              <input type="hidden" name="eventId" value={eventId} />
-              <button
-                type="submit"
-                style={{ background: "none", border: "1px solid var(--color-border)", borderRadius: 8, padding: "0.5rem 0.9rem", cursor: "pointer" }}
-              >
-                Mark paid in full manually (cash/check/Zelle)
-              </button>
-            </form>
-          )}
-        </div>
-      </div>
-
-      <div className="card">
-        <h2 style={{ marginTop: 0, fontSize: "1rem" }}>Proposal</h2>
+        <h2 style={{ marginTop: 0, fontSize: "1rem" }}>Proposal lines</h2>
         <p style={{ marginTop: "-0.5rem", marginBottom: "1rem", fontSize: "0.85rem", color: "var(--color-muted)" }}>
           This is your pricing worksheet for the event -- add line items and adjustments here.
           It&apos;s not something the client has to approve first; the contract and invoice below
@@ -194,7 +270,14 @@ export default async function EventBookingPage({
               <tbody>
                 {(items ?? []).map((item) => (
                   <tr key={item.id} style={{ borderBottom: "1px solid var(--color-border)" }}>
-                    <td style={{ padding: "0.5rem 0", whiteSpace: "pre-line" }}>{item.description}</td>
+                    <td style={{ padding: "0.5rem 0", whiteSpace: "pre-line" }}>
+                      {item.description}
+                      {item.note && (
+                        <div style={{ fontSize: "0.82rem", color: "var(--color-muted)", marginTop: "0.25rem" }}>
+                          Client sees: {item.note}
+                        </div>
+                      )}
+                    </td>
                     <td style={{ padding: "0.5rem 0" }}>{item.quantity}</td>
                     <td style={{ padding: "0.5rem 0" }}>{formatMoney(item.unit_price)}</td>
                     <td style={{ padding: "0.5rem 0" }}>{formatMoney(item.line_total)}</td>
@@ -320,7 +403,7 @@ export default async function EventBookingPage({
       {proposal && contract && (
         <div className="card">
           <h2 style={{ marginTop: 0, fontSize: "1rem" }}>Send to client</h2>
-          {proposal.status === "sent" || contract.status !== "unsent" ? (
+          {contract.status !== "unsent" ? (
             <>
               <p style={{ color: "#2a7a2a" }}>Sent to the client.</p>
               <p style={{ fontSize: "0.9rem" }}>
@@ -365,6 +448,69 @@ export default async function EventBookingPage({
           )}
         </div>
       )}
+      <div className="card">
+        <h2 style={{ marginTop: 0, fontSize: "1rem" }}>Invoice</h2>
+        <p style={{ marginTop: "-0.5rem", marginBottom: "1rem", fontSize: "0.85rem", color: "var(--color-muted)" }}>
+          One QuickBooks invoice for the full total, linked to this event automatically. It includes
+          a note asking for the retainer amount up front, and if QuickBooks Payments has &quot;Allow
+          partial payments&quot; turned on (Settings → Payments, in QuickBooks itself), the client can
+          pay just that amount now and the rest later. This app only creates the invoice — you
+          review it and send it yourself from inside QuickBooks.
+        </p>
+        {!qboConnected ? (
+          <p style={{ color: "var(--color-muted)" }}>
+            <a href="/admin/settings/quickbooks">Connect QuickBooks</a> to create a linked invoice
+            there, or mark payments received manually below.
+          </p>
+        ) : financials?.balance_paid ? (
+          <p style={{ color: "#2a7a2a", margin: 0 }}>✓ Paid in full.</p>
+        ) : financials?.invoice_id ? (
+          <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
+            <span style={{ color: "var(--color-muted)", fontSize: "0.9rem" }}>
+              Invoice created in QuickBooks and linked to this event.
+              {financials.deposit_paid ? " Retainer received, balance outstanding." : " Review it in QuickBooks and send it from there whenever you're ready."}
+            </span>
+            <form action={refreshInvoiceStatus}>
+              <input type="hidden" name="eventId" value={eventId} />
+              <button type="submit" className="button">
+                Check payment status
+              </button>
+            </form>
+          </div>
+        ) : (
+          <form action={createInvoiceDraft}>
+            <input type="hidden" name="eventId" value={eventId} />
+            <button type="submit" className="button">
+              Create invoice in QuickBooks
+            </button>
+          </form>
+        )}
+        <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", marginTop: "0.75rem" }}>
+          {!financials?.deposit_paid && (
+            <form action={markDepositReceived}>
+              <input type="hidden" name="eventId" value={eventId} />
+              <button
+                type="submit"
+                style={{ background: "none", border: "1px solid var(--color-border)", borderRadius: 8, padding: "0.5rem 0.9rem", cursor: "pointer" }}
+              >
+                Mark retainer received manually (cash/check/Zelle)
+              </button>
+            </form>
+          )}
+          {!financials?.balance_paid && (
+            <form action={markBalanceReceived}>
+              <input type="hidden" name="eventId" value={eventId} />
+              <button
+                type="submit"
+                style={{ background: "none", border: "1px solid var(--color-border)", borderRadius: 8, padding: "0.5rem 0.9rem", cursor: "pointer" }}
+              >
+                Mark paid in full manually (cash/check/Zelle)
+              </button>
+            </form>
+          )}
+        </div>
+      </div>
+
     </div>
   );
 }

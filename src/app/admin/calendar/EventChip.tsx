@@ -20,6 +20,7 @@ function handleClick(eventId: string) {
 export function EventChip({ event }: { event: CalendarEvent }) {
   const client = clientName(event);
   const cancelled = event.status === "cancelled";
+  const hold = event.status === "inquiry";
   return (
     <a
       href={`/admin/events/${event.id}`}
@@ -32,13 +33,15 @@ export function EventChip({ event }: { event: CalendarEvent }) {
         marginBottom: 2,
         textDecoration: cancelled ? "line-through" : "none",
         color: cancelled ? "var(--color-muted)" : "inherit",
-        background: cancelled ? "transparent" : "var(--color-highlight, #f1e9dd)",
+        background: cancelled ? "transparent" : hold ? "#fff" : "var(--color-highlight, #f1e9dd)",
+        border: hold ? "1px dashed var(--color-accent)" : "1px solid transparent",
         whiteSpace: "nowrap",
         overflow: "hidden",
         textOverflow: "ellipsis",
       }}
-      title={`${event.name}${client ? ` — ${client}` : ""}`}
+      title={`${hold ? "HOLD: " : ""}${event.name}${client ? ` — ${client}` : ""}`}
     >
+      {hold && <strong style={{ color: "var(--color-accent)" }}>HOLD </strong>}
       {event.name}
     </a>
   );
@@ -49,6 +52,7 @@ export function EventChip({ event }: { event: CalendarEvent }) {
 export function EventNameLink({ event }: { event: CalendarEvent }) {
   return (
     <a href={`/admin/events/${event.id}`} onClick={handleClick(event.id)}>
+      {event.status === "inquiry" ? "HOLD: " : ""}
       {event.name}
     </a>
   );

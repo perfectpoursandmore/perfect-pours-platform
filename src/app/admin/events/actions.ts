@@ -8,6 +8,7 @@ import { isEmailConfigured, sendEmail, sendTemplatedEmail } from "@/lib/email";
 import { formatDate, formatDateTime } from "@/lib/labels";
 import { zonedTimeToIso } from "@/lib/calendar-dates";
 import { syncEventToGoogle, removeEventFromGoogle } from "@/lib/google-event-sync";
+import { DISHWARE, EXTRA_HELP, SERVICES, SERVICE_STYLES, cleanValue, cleanValues } from "@/lib/event-details";
 
 async function requireAdmin() {
   const user = await getCurrentUser();
@@ -52,6 +53,10 @@ export async function updateEventOverview(formData: FormData) {
       guest_arrival_time: guestArrivalTime,
       staff_end_time: staffEndTime,
       staff_instructions: nullIfEmpty(formData.get("staffInstructions")),
+      service_style: cleanValue(SERVICE_STYLES, formData.get("serviceStyle")),
+      dishware: cleanValue(DISHWARE, formData.get("dishware")),
+      services_interested: cleanValues(SERVICES, formData.getAll("services")),
+      extra_help: cleanValues(EXTRA_HELP, formData.getAll("extraHelp")),
     })
     .eq("id", id);
 
@@ -243,7 +248,8 @@ export async function quickAddEvent(
       name,
       event_type: "other",
       event_date: eventDate,
-      status: "booked",
+      // Default is a HOLD: most quick adds are a call/text that isn't confirmed yet.
+      status: formData.get("status") === "booked" ? "booked" : "inquiry",
     })
     .select("id")
     .single();

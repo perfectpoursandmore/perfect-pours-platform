@@ -14,7 +14,8 @@ import {
   createInvoice,
   getInvoiceStatus,
 } from "@/lib/quickbooks";
-import { isEmailConfigured, sendTemplatedEmail } from "@/lib/email";
+import { isEmailConfigured, sendEmail, sendTemplatedEmail } from "@/lib/email";
+import { buildDraftProposal } from "@/lib/auto-proposal";
 
 async function requireAdmin() {
   const user = await getCurrentUser();
@@ -495,4 +496,140 @@ export async function refreshInvoiceStatus(formData: FormData) {
   }
 
   revalidatePath(`/admin/events/${eventId}/booking`);
+}
+
+// ---------------------------------------------------------------------
+// Price-first proposals (pricing goes out before any call).
+// ---------------------------------------------------------------------
+
+/**
+ * Fills the proposal from the event's details using the price list
+ * (package tier by guest count, hourly staff, gratuity). Replaces whatever
+ * lines are there -- only allowed before pricing has gone out.
+ */
+export async function autoBuildProposal(formData: FormData) {
+  await requireAdmin();
+  const supabase = createClient();
+  const eventId = String(formData.get("eventId"));
+  const proposalId = String(formData.get("proposalId"));
+
+  const [{ data: event }, { data: proposal }] = await Promise.all([
+    supabase
+      .from("events")
+      .select("event_type, guest_count, services_interested, service_style, dishware, extra_help, staff_arrival_time, staff_end_time")
+      .eq("id", eventId)
+      .single(),
+    supabase.from("proposals").select("id, status").eq("id", proposalId).single(),
+  ]);
+
+  if (!event || !proposal) redirect(`/admin/events/${eventId}/booking?error=Couldn't load this event.`);
+  if (proposal!.status === "sent") {
+    redirect(`/admin/events/${eventId}/booking?error=Pricing was already sent, so edit the lines by hand instead.`);
+  }
+
+  const draft = buildDraftProposal(event!);
+  if (draft.customQuote) {
+    redirect(`/admin/events/${eventId}/booking?error=${encodeURIComponent(`${draft.customQuote}: build this custom quote by hand.`)}`);
+  }
+
+  await supabase.from("proposal_items").delete().eq("proposal_id", proposalId);
+  if (draft.lines.length > 0) {
+    await supabase.from("proposal_items").insert(
+      draft.lines.map((l, i) => ({
+        proposal_id: proposalId,
+        description: l.description,
+        quantity: l.quantity,
+        unit_price: l.unit_price,
+        line_total: l.line_total,
+        pricing_type: "flat",
+        note: l.note,
+        sort_order: i,
+      }))
+    );
+  }
+
+  await recomputeAndSaveProposalTotals(supabase, proposalId);
+  revalidatePath(`/admin/events/${eventId}/booking`);
+}
+
+export async function saveIntroNote(formData: FormData) {
+  await requireAdmin();
+  const supabase = createClient();
+  const eventId = String(formData.get("eventId"));
+  const proposalId = String(formData.get("proposalId"));
+  const note = String(formData.get("introNote") ?? "").trim();
+
+  await supabase.from("proposals").update({ intro_note: note || null }).eq("id", proposalId);
+  revalidatePath(`/admin/events/${eventId}/booking`);
+}
+
+/**
+ * Sends the pricing link on its own (no contract yet). The client sees
+ * their proposal, can request add-ons, and books a planning call when
+ * they're ready. Also marks pricing as sent, so the dashboard's follow-up
+ * list starts counting days.
+ */
+export async function sendPricing(formData: FormData) {
+  await requireAdmin();
+  const supabase = createClient();
+  const eventId = String(formData.get("eventId"));
+  const proposalId = String(formData.get("proposalId"));
+
+  const { count } = await supabase
+    .from("proposal_items")
+    .select("id", { count: "exact", head: true })
+    .eq("proposal_id", proposalId);
+  if (!count) redirect(`/admin/events/${eventId}/booking?error=Add at least one line before sending pricing.`);
+
+  await supabase
+    .from("proposals")
+    .update({ status: "sent", sent_at: new Date().toISOString() })
+    .eq("id", proposalId);
+
+  const { data: event } = await supabase
+    .from("events")
+    .select("event_type, event_date, documents_token, clients(id, first_name, email)")
+    .eq("id", eventId)
+    .single();
+  const client = event ? (Array.isArray(event.clients) ? event.clients[0] : event.clients) : null;
+
+  let emailed = false;
+  if (formData.get("emailClient") === "on" && isEmailConfigured() && client?.email && event) {
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://perfect-pours-platform.vercel.app";
+    const link = `${appUrl}/client/${event.documents_token}`;
+    const typeLabel = (EVENT_TYPE_LABELS[event.event_type] ?? "event").toLowerCase();
+    try {
+      await sendEmail({
+        to: client.email,
+        subject: "Your personalized pricing — Perfect Pours & More",
+        html: `<p>Hi ${escapeHtml(client.first_name ?? "")},</p>
+<p>Your personalized pricing for your ${escapeHtml(typeLabel)} on ${formatDate(event.event_date)} is ready! Everything is in one place here:</p>
+<p><a href="${link}" style="display:inline-block;background:#7a3b2e;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none">View my pricing</a></p>
+<p>When you're ready to move forward, you can book a quick planning call right from that page.</p>
+<p>Cheers,<br>Faith<br>Perfect Pours &amp; More</p>`,
+      });
+      emailed = true;
+    } catch (err) {
+      console.error("sendPricing: email failed:", err);
+    }
+  }
+
+  revalidatePath(`/admin/events/${eventId}/booking`);
+  revalidatePath("/admin");
+  redirect(`/admin/events/${eventId}/booking?pricingSent=${emailed ? "emailed" : "link"}`);
+}
+
+export async function markAddonsHandled(formData: FormData) {
+  await requireAdmin();
+  const supabase = createClient();
+  const eventId = String(formData.get("eventId"));
+  const proposalId = String(formData.get("proposalId"));
+
+  await supabase.from("proposals").update({ addons_handled_at: new Date().toISOString() }).eq("id", proposalId);
+  revalidatePath(`/admin/events/${eventId}/booking`);
+  revalidatePath("/admin");
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 }
