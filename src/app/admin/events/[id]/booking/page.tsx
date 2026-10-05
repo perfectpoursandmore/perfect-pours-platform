@@ -201,7 +201,7 @@ export default async function EventBookingPage({
               <button type="submit" className="button">
                 Send pricing
               </button>
-              <a href={clientLink} target="_blank" rel="noreferrer" style={{ fontSize: "0.9rem" }}>
+              <a href={`${clientLink}?preview=1`} target="_blank" rel="noreferrer" style={{ fontSize: "0.9rem" }}>
                 Preview what they&apos;ll see
               </a>
             </div>

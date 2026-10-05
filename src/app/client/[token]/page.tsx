@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { formatMoney, formatDate } from "@/lib/labels";
 import { SignaturePad } from "@/components/SignaturePad";
 import { signContract, requestAddons } from "./actions";
+import { getCurrentUser } from "@/lib/auth/roles";
 import { ADD_ONS, PACKAGE, TIMING_POLICIES } from "@/lib/price-list";
 
 export default async function ClientDocumentsPage({
@@ -10,7 +11,7 @@ export default async function ClientDocumentsPage({
   searchParams,
 }: {
   params: { token: string };
-  searchParams: { error?: string; addons?: string };
+  searchParams: { error?: string; addons?: string; preview?: string };
 }) {
   const supabase = createAdminClient();
 
@@ -51,7 +52,9 @@ export default async function ClientDocumentsPage({
   const client = Array.isArray(event.clients) ? event.clients[0] : event.clients;
   // Pricing can go out on its own, before any contract exists.
   const contractReady = Boolean(contract && contract.status !== "unsent");
-  const pricingReady = Boolean(proposal && (proposal.status === "sent" || contractReady));
+  // Faith can preview the page before sending (only when she's logged in as admin).
+  const adminPreview = searchParams.preview === "1" && (await getCurrentUser())?.role === "admin";
+  const pricingReady = Boolean(proposal && (proposal.status === "sent" || contractReady || adminPreview));
   const ready = pricingReady || contractReady;
   const hasPackage = (items ?? []).some((i) => String(i.description).startsWith(PACKAGE.name));
   const requested: string[] = proposal?.requested_addons ?? [];
@@ -72,6 +75,11 @@ export default async function ClientDocumentsPage({
         </p>
       ) : (
         <div style={{ display: "grid", gap: "1.5rem" }}>
+          {adminPreview && proposal?.status !== "sent" && (
+            <p style={{ margin: 0, padding: "0.6rem 0.9rem", background: "#fff8ec", border: "1px solid #ecd9b5", borderRadius: 8 }}>
+              Preview only. The client can&apos;t see this until you click Send pricing.
+            </p>
+          )}
           {searchParams.error && <p style={{ color: "#a33" }}>{searchParams.error}</p>}
 
           {pricingReady && proposal && (
