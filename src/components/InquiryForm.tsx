@@ -96,9 +96,8 @@ export function InquiryForm() {
       <div className="card" style={{ maxWidth: 560 }}>
         <h2 style={{ marginTop: 0 }}>Thank you{done ? `, ${done}` : ""}!</h2>
         <p style={{ marginBottom: 0 }}>
-          We&apos;ve got your event details and will email you pricing for your event within 24
-          hours, or within 48 hours over the weekend. Keep an eye on your inbox (and your spam
-          folder, just in case).
+          We&apos;ve got your event details and will email you pricing within 24-48 hours. Keep an
+          eye on your inbox (and your spam folder, just in case).
         </p>
       </div>
     );
