@@ -125,6 +125,7 @@ export function buildDraftProposal(e: EventForPricing): DraftResult {
     const reasons = [
       e.service_style === "plated" && "plated dinner",
       e.service_style === "family_style" && "family-style service",
+      e.service_style === "appetizers" && "appetizers, if they're passed",
       e.dishware === "real" && "real dishes",
       (e.extra_help ?? []).includes("passed_apps") && "passed appetizers",
     ].filter(Boolean);

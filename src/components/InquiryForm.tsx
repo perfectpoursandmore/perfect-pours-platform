@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { CSSProperties, FormEvent } from "react";
-import { DISHWARE, EXTRA_HELP, SERVICES, SERVICE_STYLES, type Option } from "@/lib/event-details";
+import { DISHWARE, SERVICES, SERVICE_STYLES, type Option } from "@/lib/event-details";
 
 const EVENT_TYPES: Option[] = [
   { value: "wedding", label: "Wedding" },
@@ -34,6 +34,7 @@ export function InquiryForm() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
+  const [eventType, setEventType] = useState("");
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -47,6 +48,8 @@ export function InquiryForm() {
       email: fd.get("email"),
       phone: fd.get("phone"),
       eventType: fd.get("eventType"),
+      eventTypeOther: fd.get("eventTypeOther"),
+      guestArrivalTime: fd.get("guestArrivalTime"),
       eventDate: fd.get("eventDate"),
       venueName: fd.get("venueName"),
       addressLine: fd.get("addressLine"),
@@ -57,7 +60,6 @@ export function InquiryForm() {
       services: fd.getAll("services"),
       serviceStyle: fd.get("serviceStyle"),
       dishware: fd.get("dishware"),
-      extraHelp: fd.getAll("extraHelp"),
       howHeard: fd.get("howHeard"),
       message: fd.get("message"),
       company: fd.get("company"),
@@ -123,7 +125,14 @@ export function InquiryForm() {
         <Row>
           <div>
             <label htmlFor="eventType">Event type</label>
-            <select id="eventType" name="eventType" required defaultValue="" style={selectStyle}>
+            <select
+              id="eventType"
+              name="eventType"
+              required
+              value={eventType}
+              onChange={(e) => setEventType(e.target.value)}
+              style={selectStyle}
+            >
               <option value="" disabled>
                 Select one
               </option>
@@ -136,8 +145,14 @@ export function InquiryForm() {
           </div>
           <Field label="Event date" name="eventDate" type="date" required />
         </Row>
-        <Field label="Estimated guest count" name="guestCount" type="number" min={1} required />
-        <Field label="Venue name (if there is one)" name="venueName" />
+        {eventType === "other" && (
+          <Field label="What kind of event?" name="eventTypeOther" required placeholder="e.g. Retirement party" />
+        )}
+        <Row>
+          <Field label="Guest arrival time" name="guestArrivalTime" type="time" required />
+          <Field label="Estimated guest count" name="guestCount" type="number" min={1} required />
+        </Row>
+        <Field label="Venue name (if applicable)" name="venueName" />
         <Field label="Street address" name="addressLine" autoComplete="street-address" />
         <Row cols="2fr 1fr 1fr">
           <Field label="Town/City" name="city" required autoComplete="address-level2" />
@@ -146,21 +161,15 @@ export function InquiryForm() {
         </Row>
       </Section>
 
-      <Section title="What are you interested in?" hint="Check all that apply.">
+      <Section title="What services are you interested in?" hint="Check all that apply.">
         <CheckList name="services" options={SERVICES} />
       </Section>
 
-      <Section title="Food at your event" hint="This helps us figure out the right amount of staff for you.">
+      <Section title="Food Service Style" hint="This helps us figure out the right amount of staff for you.">
         <RadioList name="serviceStyle" options={SERVICE_STYLES} />
         <div>
-          <p style={{ margin: "0.5rem 0 0.4rem", fontWeight: 600, fontSize: "0.95rem" }}>Plates and glassware</p>
+          <p style={{ margin: "0.5rem 0 0.4rem", fontWeight: 600, fontSize: "0.95rem" }}>Which will you be using?</p>
           <RadioList name="dishware" options={DISHWARE} />
-        </div>
-        <div>
-          <p style={{ margin: "0.5rem 0 0.4rem", fontWeight: 600, fontSize: "0.95rem" }}>
-            Would you like help with any of these?
-          </p>
-          <CheckList name="extraHelp" options={EXTRA_HELP} />
         </div>
       </Section>
 

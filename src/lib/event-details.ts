@@ -6,29 +6,36 @@ export type Option = { value: string; label: string; hint?: string };
 
 /** What the client is interested in. Starter list; edit freely. */
 export const SERVICES: Option[] = [
-  { value: "signature_cocktails", label: "Perfect Pours Package", hint: "Our full-service bar: 2 signature cocktails, fresh juices, bar, menu and more" },
+  {
+    value: "signature_cocktails", // = the Perfect Pours Package (value kept for pricing)
+    label: "Perfect Pours Package",
+    hint: "All the things: 2 signature cocktails & full bar service, custom menu, disposables, shopping list, bar rental",
+  },
   { value: "bartender", label: "Bartender only", hint: "You provide the alcohol, mixers, ice and cups" },
-  { value: "server", label: "Server", hint: "Food setup, clearing plates, cleanup and more" },
-  { value: "mocktails", label: "Mocktails" },
-  { value: "beer_wine_tasting", label: "Beer or wine tasting" },
-  { value: "mixology_class", label: "Mixology class" },
+  {
+    value: "server",
+    label: "Server",
+    hint: "The cheat code to hosting stress-free… Food setup, clearing plates, cleanup and more, all handled by us",
+  },
+  { value: "mocktails", label: "Mocktails, Wellness Bar, Coffee Bar" },
+  { value: "interactive", label: "Interactive event: Beer/Wine Tasting, Mixology Class, etc." },
+  { value: "setup_decor", label: "Event set up, decor, and design services" },
   { value: "not_sure", label: "Not sure yet, help me decide" },
 ];
 
 /** How food is served. Drives how many servers an event needs. */
 export const SERVICE_STYLES: Option[] = [
   { value: "no_food", label: "No food, drinks only" },
+  { value: "appetizers", label: "Appetizers only (passed or stationary)" },
   { value: "buffet", label: "Buffet" },
-  { value: "stations", label: "Food stations" },
   { value: "family_style", label: "Family style" },
   { value: "plated", label: "Plated sit-down dinner" },
-  { value: "passed_only", label: "Passed appetizers only (cocktail party)" },
   { value: "not_sure", label: "Not sure yet" },
 ];
 
 export const DISHWARE: Option[] = [
-  { value: "disposable", label: "Disposable plates and cups" },
-  { value: "real", label: "Real dishes and glassware" },
+  { value: "disposable", label: "Disposable plates, cups, and cutlery" },
+  { value: "real", label: "Real dishes, glassware, and cutlery" },
   { value: "not_sure", label: "Not sure yet" },
 ];
 

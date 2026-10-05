@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { isEmailConfigured, sendEmail } from "@/lib/email";
 import { EVENT_TYPE_LABELS, formatDate } from "@/lib/labels";
 import { syncEventToGoogle } from "@/lib/google-event-sync";
+import { zonedTimeToIso } from "@/lib/calendar-dates";
 import {
   DISHWARE,
   EXTRA_HELP,
@@ -43,6 +44,8 @@ export async function POST(request: Request) {
   const phone = str(body.phone);
   const eventType = str(body.eventType);
   const eventDate = str(body.eventDate);
+  const eventTypeOther = str(body.eventTypeOther).slice(0, 80);
+  const guestArrivalTime = str(body.guestArrivalTime);
   const venueName = str(body.venueName) || null;
   const addressLine = str(body.addressLine) || null;
   const city = str(body.city);
@@ -68,6 +71,12 @@ export async function POST(request: Request) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(eventDate)) {
     return NextResponse.json({ error: "Please pick your event date." }, { status: 400 });
   }
+  if (eventType === "other" && !eventTypeOther) {
+    return NextResponse.json({ error: "Please tell us what kind of event it is." }, { status: 400 });
+  }
+  if (!/^\d{2}:\d{2}$/.test(guestArrivalTime)) {
+    return NextResponse.json({ error: "Please enter your guest arrival time." }, { status: 400 });
+  }
   if (!Number.isFinite(guestCount) || guestCount < 1 || guestCount > 5000) {
     return NextResponse.json({ error: "Please enter your estimated guest count." }, { status: 400 });
   }
@@ -76,7 +85,12 @@ export async function POST(request: Request) {
   }
 
   const supabase = createAdminClient();
-  const typeLabel = EVENT_TYPE_LABELS[eventType] ?? eventType;
+  // "Other" uses whatever they typed, e.g. "Retirement party".
+  const typeLabel = eventType === "other" && eventTypeOther ? eventTypeOther : EVENT_TYPE_LABELS[eventType] ?? eventType;
+  const guestArrivalIso = zonedTimeToIso(eventDate, guestArrivalTime);
+  const guestArrivalLabel = new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone: "UTC" }).format(
+    new Date(`1970-01-01T${guestArrivalTime}:00Z`)
+  );
 
   // 1. Client: reuse by email so repeat clients keep one history.
   let clientId: string;
@@ -118,6 +132,7 @@ export async function POST(request: Request) {
       state,
       zip,
       guest_count: guestCount,
+      guest_arrival_time: guestArrivalIso,
       status: "inquiry",
       service_style: serviceStyle,
       dishware,
@@ -187,13 +202,12 @@ ${conflictNote}
 <li><strong>Name:</strong> ${esc(firstName)} ${esc(lastName)}${repeatClient ? " (repeat client)" : ""}</li>
 <li><strong>Email:</strong> ${esc(email)}</li>
 <li><strong>Phone:</strong> ${esc(phone)}</li>
-<li><strong>Event:</strong> ${esc(typeLabel)} on ${formatDate(eventDate)}</li>
+<li><strong>Event:</strong> ${esc(typeLabel)} on ${formatDate(eventDate)}, guests arrive at ${guestArrivalLabel}</li>
 <li><strong>Where:</strong> ${esc([venueName, addressLine, city, state].filter(Boolean).join(", "))}</li>
 <li><strong>Guests:</strong> ${guestCount}</li>
 <li><strong>Interested in:</strong> ${esc(labelsFor(SERVICES, services))}</li>
 <li><strong>Food service:</strong> ${esc(labelFor(SERVICE_STYLES, serviceStyle))}</li>
 <li><strong>Dishware:</strong> ${esc(labelFor(DISHWARE, dishware))}</li>
-<li><strong>Extra help:</strong> ${esc(labelsFor(EXTRA_HELP, extraHelp))}</li>
 <li><strong>How they heard about us:</strong> ${esc(howHeard ?? "—")}</li>
 </ul>
 ${message ? `<p><strong>Their note:</strong><br>${esc(message).replace(/\n/g, "<br>")}</p>` : ""}
