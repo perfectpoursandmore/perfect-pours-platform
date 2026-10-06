@@ -508,18 +508,21 @@ export async function autoBuildProposal(formData: FormData) {
 
 async function buildProposalFromDetails(supabase: ReturnType<typeof createClient>, eventId: string, proposalId: string) {
   const back = `/admin/events/${eventId}/booking`;
-  const [{ data: event }, { data: proposal }] = await Promise.all([
+  const [{ data: event }, { data: proposal }, { data: contract }] = await Promise.all([
     supabase
       .from("events")
       .select("event_type, guest_count, services_interested, service_style, dishware, extra_help, staff_arrival_time, staff_end_time")
       .eq("id", eventId)
       .single(),
     supabase.from("proposals").select("id, status").eq("id", proposalId).single(),
+    supabase.from("contracts").select("status").eq("event_id", eventId).order("created_at", { ascending: false }).limit(1).maybeSingle(),
   ]);
 
   if (!event || !proposal) redirect(`${back}?error=Couldn't load this event.`);
-  if (proposal!.status === "sent") {
-    redirect(`${back}?error=Pricing was already sent, so edit the lines by hand instead.`);
+  // Rebuilding after pricing went out is fine (their page just updates), but
+  // not once a contract is out -- it lists the services they agreed to.
+  if (contract && contract.status !== "unsent") {
+    redirect(`${back}?error=${encodeURIComponent("The contract already went out, so edit the proposal lines by hand instead.")}`);
   }
 
   const draft = buildDraftProposal(event!, await getPriceList(supabase));
@@ -527,7 +530,9 @@ async function buildProposalFromDetails(supabase: ReturnType<typeof createClient
     redirect(`${back}?error=${encodeURIComponent(`${draft.customQuote}: build this custom quote by hand.`)}`);
   }
 
-  await supabase.from("proposal_items").delete().eq("proposal_id", proposalId);
+  // Add the new lines first and only then remove the old ones, so a failed
+  // save never leaves the proposal half-built.
+  const { data: oldLines } = await supabase.from("proposal_items").select("id").eq("proposal_id", proposalId);
   if (draft.lines.length > 0) {
     const rows = draft.lines.map((l, i) => ({
       proposal_id: proposalId,
@@ -541,14 +546,19 @@ async function buildProposalFromDetails(supabase: ReturnType<typeof createClient
       ...(l.option ? { option_label: l.option } : {}),
     }));
     const { error } = await supabase.from("proposal_items").insert(rows);
-    if (error && draft.lines.some((l) => l.option)) {
+    if (error) {
+      console.error("buildProposalFromDetails:", error);
       redirect(
         `${back}?error=${encodeURIComponent(
-          "This proposal has two options, which needs a quick database update first. Run supabase/migrations/0022_proposal_options.sql in the Supabase SQL Editor, then build again."
+          draft.lines.some((l) => l.option)
+            ? "Couldn't save the two options: the database update for options hasn't been run yet. See the box at the top of this page."
+            : `Couldn't save the proposal: ${error.message}`
         )}`
       );
     }
   }
+  const oldIds = (oldLines ?? []).map((l: { id: string }) => l.id);
+  if (oldIds.length > 0) await supabase.from("proposal_items").delete().in("id", oldIds);
   // A fresh proposal starts with no option picked.
   await supabase.from("proposals").update({ chosen_option: null, option_chosen_at: null }).eq("id", proposalId);
 

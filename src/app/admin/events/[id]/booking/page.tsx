@@ -107,9 +107,27 @@ export default async function EventBookingPage({
     }).totalAmount;
   const shownOption = effectiveOption(items, chosen);
 
+  // The options feature needs a one-time database update (0022). select("*")
+  // on proposals tells us whether it's been run.
+  const optionsDbReady = Boolean(proposal && "chosen_option" in proposal);
+  const draftHasOptions = Boolean(draft?.lines.some((l) => l.option));
+  const proposalOutOfDate = draftHasOptions && items.length > 0 && options.length === 0;
+
   return (
     <div style={{ display: "grid", gap: "1.25rem" }}>
       {searchParams.error && <p style={{ margin: 0, color: "var(--color-danger)" }}>{searchParams.error}</p>}
+
+      {!optionsDbReady && (
+        <div className="notice" style={{ border: "1px solid var(--color-danger)" }}>
+          <strong>One-time setup needed for package vs bartender options.</strong>
+          <p style={{ margin: "0.4rem 0" }}>
+            In Supabase, open the SQL Editor, paste this in, click Run, then come back and click Save &amp; rebuild proposal:
+          </p>
+          <pre style={{ margin: 0, whiteSpace: "pre-wrap", fontSize: "0.82rem", background: "#fff", padding: "0.6rem", borderRadius: 6 }}>
+            {OPTIONS_SQL}
+          </pre>
+        </div>
+      )}
 
       {/* ---------- Status at a glance ---------- */}
       <section className="card" style={{ display: "grid", gap: "0.85rem" }}>
@@ -234,7 +252,7 @@ export default async function EventBookingPage({
           </div>
 
           <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", alignItems: "center" }}>
-            {!pricingSent && !draft?.customQuote ? (
+            {!draft?.customQuote && !(contract && contract.status !== "unsent") ? (
               <>
                 <button type="submit" name="intent" value="build" className="button">
                   {items.length > 0 ? "Save & rebuild proposal" : "Save & build proposal"}
@@ -242,7 +260,11 @@ export default async function EventBookingPage({
                 <button type="submit" name="intent" value="save" className="button-secondary">
                   Save only
                 </button>
-                {items.length > 0 && <span className="muted small">Rebuilding replaces the proposal below.</span>}
+                {items.length > 0 && (
+                  <span className="muted small">
+                    Rebuilding replaces the proposal below{pricingSent ? ", and their pricing page updates right away" : ""}.
+                  </span>
+                )}
               </>
             ) : (
               <button type="submit" name="intent" value="save" className="button">
@@ -262,7 +284,7 @@ export default async function EventBookingPage({
       <section className="card" id="proposal" style={{ display: "grid", gap: "1rem" }}>
         <h2 style={h2}>Proposal</h2>
 
-        {draft && draft.headsUps.length > 0 && !pricingSent && (
+        {draft && draft.headsUps.length > 0 && (
           <div className="notice">
             <strong className="small">Heads up (only you see this)</strong>
             <ul style={{ margin: "0.35rem 0 0", paddingLeft: "1.1rem", display: "grid", gap: "0.2rem" }}>
@@ -270,6 +292,13 @@ export default async function EventBookingPage({
                 <li key={h}>{h}</li>
               ))}
             </ul>
+          </div>
+        )}
+
+        {proposalOutOfDate && optionsDbReady && (
+          <div className="notice" style={{ border: "1px solid var(--color-text)" }}>
+            This proposal was built before they checked both the package and bartender only. Click{" "}
+            <strong>Save &amp; rebuild proposal</strong> above to show both options.
           </div>
         )}
 
@@ -604,6 +633,10 @@ export default async function EventBookingPage({
     </div>
   );
 }
+
+const OPTIONS_SQL = `alter table public.proposal_items add column if not exists option_label text;
+alter table public.proposals add column if not exists chosen_option text;
+alter table public.proposals add column if not exists option_chosen_at timestamptz;`;
 
 const h2 = { margin: 0, fontSize: "1.05rem" } as const;
 const autoGrid = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.85rem" } as const;
