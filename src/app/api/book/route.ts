@@ -29,6 +29,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });
   }
 
+  // From their pricing page: we already have the client and event, so only
+  // the time is sent.
+  if (isNonEmptyString(body.eventToken)) {
+    return bookKnownClient(body.eventToken, body.slotStart);
+  }
+
   const {
     slotStart,
     firstName,
@@ -224,4 +230,128 @@ export async function POST(request: Request) {
     consultationAt: chosenSlot.start.toISOString(),
     calendarEventLink,
   });
+}
+
+/**
+ * Planning call for a client who already sent their details (they came from
+ * their pricing page). Puts the call on Faith's calendar and on their
+ * existing lead/event -- no new lead, no retyping.
+ */
+async function bookKnownClient(eventToken: string, slotStart: unknown) {
+  if (!isNonEmptyString(slotStart) || Number.isNaN(new Date(slotStart).getTime())) {
+    return NextResponse.json({ error: "Invalid call time." }, { status: 400 });
+  }
+  const slotStartDate = new Date(slotStart);
+
+  const supabase = createAdminClient();
+  const { data: event } = await supabase
+    .from("events")
+    .select("id, name, event_type, event_date, client_id, clients(first_name, last_name, email, phone)")
+    .eq("documents_token", eventToken)
+    .maybeSingle();
+  if (!event) {
+    return NextResponse.json({ error: "We couldn't find your event. Please use the link from your pricing email." }, { status: 404 });
+  }
+  const client = (Array.isArray(event.clients) ? event.clients[0] : event.clients) as
+    | { first_name: string; last_name: string; email: string | null; phone: string | null }
+    | null;
+  const name = client ? `${client.first_name} ${client.last_name}`.trim() : event.name;
+
+  const { slots } = await loadAvailableSlots();
+  const chosenSlot = slots.find((s) => s.start.getTime() === slotStartDate.getTime());
+  if (!chosenSlot) {
+    return NextResponse.json(
+      { error: "That time was just booked or is no longer available. Please pick another." },
+      { status: 409 }
+    );
+  }
+
+  try {
+    const calendar = await getValidAccessToken();
+    if (calendar) {
+      const { data: settingsRow } = await supabase.from("consultation_settings").select("time_zone").eq("id", true).single();
+      await createConsultationEvent({
+        accessToken: calendar.accessToken,
+        calendarId: calendar.calendarId,
+        start: chosenSlot.start,
+        end: chosenSlot.end,
+        timeZone: settingsRow?.time_zone ?? "America/New_York",
+        clientName: name,
+        clientEmail: client?.email ?? "",
+        eventType: EVENT_TYPE_LABELS[event.event_type] ?? event.event_type,
+      });
+    }
+  } catch (err) {
+    console.error("Planning call: Google Calendar event failed:", err);
+  }
+
+  // Record the call on their existing lead (that's what the dashboard's
+  // "Upcoming consultations" reads). Repeat clients Faith added by hand may
+  // not have one, so create it from what's already on file.
+  const consultationAt = chosenSlot.start.toISOString();
+  const { data: lead } = await supabase
+    .from("leads")
+    .select("id")
+    .eq("event_id", event.id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const { error } = lead
+    ? await supabase.from("leads").update({ consultation_at: consultationAt, status: "consultation_scheduled" }).eq("id", lead.id)
+    : await supabase.from("leads").insert({
+        first_name: client?.first_name ?? name,
+        last_name: client?.last_name ?? "",
+        email: client?.email ?? "",
+        phone: client?.phone ?? "",
+        event_type: event.event_type,
+        event_date: event.event_date,
+        consultation_at: consultationAt,
+        status: "consultation_scheduled",
+        client_id: event.client_id,
+        event_id: event.id,
+      });
+  if (error) {
+    console.error("Planning call: saving failed:", error);
+    return NextResponse.json({ error: "Something went wrong saving your call. Please try again." }, { status: 500 });
+  }
+
+  if (isEmailConfigured()) {
+    try {
+      const { data: template } = await supabase
+        .from("email_templates")
+        .select("id")
+        .eq("active", true)
+        .ilike("name", "%consultation%")
+        .limit(1)
+        .single();
+      if (template && client?.email) {
+        await sendTemplatedEmail(supabase, {
+          templateId: template.id,
+          to: client.email,
+          vars: {
+            client_name: name,
+            consultation_datetime: formatDateTime(consultationAt),
+            event_type: EVENT_TYPE_LABELS[event.event_type] ?? event.event_type,
+          },
+          clientId: event.client_id,
+          eventId: event.id,
+        });
+      }
+    } catch (err) {
+      console.error("Planning call: confirmation email failed:", err);
+    }
+    try {
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://perfect-pours-platform.vercel.app";
+      await sendEmail({
+        to: process.env.ADMIN_NOTIFICATION_EMAIL || "faith@perfectpoursandmore.com",
+        subject: `Planning call booked: ${name}, ${formatDateTime(consultationAt)}`,
+        html: `<p>${name} booked a planning call for ${formatDateTime(consultationAt)} about ${event.name}.</p>
+<p><a href="${appUrl}/admin/events/${event.id}/booking">Open their event</a></p>`,
+      });
+    } catch (err) {
+      console.error("Planning call: notification failed:", err);
+    }
+  }
+
+  return NextResponse.json({ ok: true, consultationAt });
 }

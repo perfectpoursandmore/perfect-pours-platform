@@ -52,7 +52,9 @@ function formatTime(iso: string, timeZone: string) {
   }).format(new Date(iso));
 }
 
-export function BookingFlow() {
+type Known = { token: string; firstName: string; summary: string } | null;
+
+export function BookingFlow({ known = null }: { known?: Known }) {
   const [data, setData] = useState<SlotsResponse | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -110,7 +112,7 @@ export function BookingFlow() {
       const res = await fetch("/api/book", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slotStart: selectedSlot, ...form }),
+        body: JSON.stringify(known ? { slotStart: selectedSlot, eventToken: known.token } : { slotStart: selectedSlot, ...form }),
       });
       const json = await res.json();
 
@@ -132,7 +134,7 @@ export function BookingFlow() {
       <div className="card" style={{ maxWidth: 480 }}>
         <h2 style={{ marginTop: 0 }}>You&apos;re booked!</h2>
         <p>
-          Your consultation is set for{" "}
+          {known ? "Your planning call is set for" : "Your consultation is set for"}{" "}
           <strong>
             {new Intl.DateTimeFormat("en-US", {
               dateStyle: "full",
@@ -201,6 +203,37 @@ export function BookingFlow() {
           </div>
         ))}
       </div>
+    );
+  }
+
+  if (known) {
+    return (
+      <form onSubmit={handleSubmit} className="card" style={{ maxWidth: 480, display: "grid", gap: "1rem" }}>
+        <div>
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedSlot(null);
+              setSelectedDate(null);
+            }}
+            style={{ background: "none", border: "none", color: "var(--color-text)", cursor: "pointer", padding: 0, textDecoration: "underline" }}
+          >
+            ← Choose a different time
+          </button>
+        </div>
+        <div>
+          <strong style={{ fontSize: "1.1rem" }}>
+            {formatDateHeading(selectedSlot, data.timeZone)} at {formatTime(selectedSlot, data.timeZone)}
+          </strong>
+          <p style={{ margin: "0.25rem 0 0", color: "var(--color-muted)" }}>
+            {known.firstName ? `Hi ${known.firstName}! ` : ""}This is your planning call about {known.summary}.
+          </p>
+        </div>
+        {submitError && <p style={{ color: "var(--color-danger)", margin: 0 }}>{submitError}</p>}
+        <button type="submit" className="button" disabled={submitting} style={{ justifySelf: "start" }}>
+          {submitting ? "Booking…" : "Confirm my call"}
+        </button>
+      </form>
     );
   }
 

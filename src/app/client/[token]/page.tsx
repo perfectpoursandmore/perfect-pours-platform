@@ -216,7 +216,7 @@ export default async function ClientDocumentsPage({
                     Pick a time for a quick planning call. We&apos;ll go over the details, answer any questions, and then
                     send your agreement to lock in your date.
                   </p>
-                  <a href="/book" className="button">
+                  <a href={`/book?event=${params.token}`} className="button">
                     Schedule my planning call
                   </a>
                 </section>
