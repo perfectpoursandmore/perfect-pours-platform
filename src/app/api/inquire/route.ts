@@ -220,7 +220,7 @@ ${message ? `<p><strong>Their note:</strong><br>${esc(message).replace(/\n/g, "<
     try {
       await sendEmail({
         to: email,
-        subject: "We got your event details! — Perfect Pours & More",
+        subject: `Got your details for ${typeLabel.toLowerCase()} on ${formatDate(eventDate)}`,
         html: `<p>Hi ${esc(firstName)},</p>
 <p>Thank you for reaching out about your ${esc(typeLabel.toLowerCase())} on ${formatDate(eventDate)}! We've received your details and will send over pricing for your event. You'll hear back from us within 24 hours, or within 48 hours if you reached out over the weekend.</p>
 <p>We can't wait to help you host stress-free!</p>

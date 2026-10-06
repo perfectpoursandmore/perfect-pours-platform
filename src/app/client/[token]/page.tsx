@@ -7,6 +7,9 @@ import { computeProposalTotals, linesForOption, proposalOptions } from "@/lib/pr
 import { getCurrentUser } from "@/lib/auth/roles";
 import { getPriceList, timingPolicies } from "@/lib/price-list";
 
+// Always build this page fresh -- it has to reflect pricing the moment it's sent.
+export const dynamic = "force-dynamic";
+
 export default async function ClientDocumentsPage({
   params,
   searchParams,

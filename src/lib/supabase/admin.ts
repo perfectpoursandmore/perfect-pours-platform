@@ -12,6 +12,12 @@ export function createAdminClient() {
   return createSupabaseClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { persistSession: false } }
+    {
+      auth: { persistSession: false },
+      // Always read live data. Without this, Next.js caches these lookups,
+      // so a client's pricing page kept showing "not ready yet" after
+      // pricing had been sent.
+      global: { fetch: (input: RequestInfo | URL, init?: RequestInit) => fetch(input, { ...init, cache: "no-store" }) },
+    }
   );
 }

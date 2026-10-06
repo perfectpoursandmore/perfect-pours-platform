@@ -34,6 +34,10 @@ export async function sendEmail(params: {
       to: params.to,
       subject: params.subject,
       html: params.html,
+      // A plain-text copy and a real reply-to make an email look like a
+      // person wrote it, which helps Gmail put it in Primary, not Promotions.
+      text: htmlToText(params.html),
+      reply_to: process.env.EMAIL_REPLY_TO || "faith@perfectpoursandmore.com",
     }),
   });
 
@@ -42,6 +46,23 @@ export async function sendEmail(params: {
   }
 
   return res.json();
+}
+
+/** Rough plain-text version of a simple HTML email ("text (link)" for links). */
+export function htmlToText(html: string): string {
+  return html
+    .replace(/<a [^>]*href="([^"]+)"[^>]*>(.*?)<\/a>/gi, (_m, href, label) => {
+      const text = String(label).replace(/<[^>]+>/g, "").trim();
+      return text && text !== href ? `${text}: ${href}` : href;
+    })
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|li|h[1-6])>/gi, "\n\n")
+    .replace(/<li[^>]*>/gi, "- ")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, " ")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 // Deliberately `any`, not a structural shape: the real Supabase client's

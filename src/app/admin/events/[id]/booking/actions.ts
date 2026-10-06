@@ -670,12 +670,14 @@ export async function sendPricing(formData: FormData) {
     try {
       await sendEmail({
         to: client.email,
-        subject: "Your personalized pricing — Perfect Pours & More",
+        // Written like a personal note (plain link, no big button or branded
+        // subject) so Gmail files it in Primary instead of Promotions.
+        subject: `Pricing for your ${typeLabel} on ${formatDate(event.event_date)}`,
         html: `<p>Hi ${escapeHtml(client.first_name ?? "")},</p>
-<p>Your personalized pricing for your ${escapeHtml(typeLabel)} on ${formatDate(event.event_date)} is ready! Everything is in one place here:</p>
-<p><a href="${link}" style="display:inline-block;background:#111111;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none">View my pricing</a></p>
-<p>When you're ready to move forward, you can book a quick planning call right from that page.</p>
-<p>Cheers,<br>Faith<br>Perfect Pours &amp; More</p>`,
+<p>Thanks so much for reaching out! I put together pricing for your ${escapeHtml(typeLabel)} on ${formatDate(event.event_date)}. You can see everything here:</p>
+<p><a href="${link}">${link}</a></p>
+<p>Take a look and just reply to this email with any questions. When you're ready, you can book a quick planning call right from that page.</p>
+<p>Faith<br>Perfect Pours &amp; More</p>`,
       });
       emailed = true;
     } catch (err) {
