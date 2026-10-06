@@ -21,7 +21,7 @@ export async function sendEmail(params: {
   html: string;
 }): Promise<{ id: string }> {
   const apiKey = requireEnv("RESEND_API_KEY");
-  const from = requireEnv("RESEND_FROM_EMAIL");
+  const from = withSenderName(requireEnv("RESEND_FROM_EMAIL"));
 
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -46,6 +46,17 @@ export async function sendEmail(params: {
   }
 
   return res.json();
+}
+
+/**
+ * Shows a person's name as the sender ("Faith at Perfect Pours"), which
+ * looks less like a marketing blast to Gmail. If the setting already has a
+ * name in it (Name <email>), that's kept as is.
+ */
+function withSenderName(from: string): string {
+  if (from.includes("<")) return from;
+  const name = process.env.EMAIL_FROM_NAME || "Faith at Perfect Pours";
+  return `${name} <${from.trim()}>`;
 }
 
 /** Rough plain-text version of a simple HTML email ("text (link)" for links). */
