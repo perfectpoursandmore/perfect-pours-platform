@@ -644,12 +644,7 @@ export async function sendPricing(formData: FormData) {
   const eventId = String(formData.get("eventId"));
   const proposalId = String(formData.get("proposalId"));
 
-  const { count } = await supabase
-    .from("proposal_items")
-    .select("id", { count: "exact", head: true })
-    .eq("proposal_id", proposalId);
-  if (!count) redirect(`/admin/events/${eventId}/booking?error=Add at least one line before sending pricing.`);
-
+  // Pricing is a menu built from the price list, so no proposal lines are needed yet.
   await supabase
     .from("proposals")
     .update({ status: "sent", sent_at: new Date().toISOString() })

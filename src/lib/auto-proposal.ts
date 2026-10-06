@@ -98,7 +98,7 @@ export function buildDraftProposal(e: EventForPricing, pl: PriceList): DraftResu
   const gratuity = new Map<string | null, number>();
   const addGratuity = (option: string | null, amount: number) => gratuity.set(option, (gratuity.get(option) ?? 0) + amount);
   if (offerBoth) {
-    headsUps.push("They checked both the package and bartender only, so the proposal offers both. The client picks one on their pricing page.");
+    headsUps.push("They asked about both the package and bartender only, so this shows both as options. After your call, set which one they chose.");
   }
 
   if (wantsPackage && guests) {

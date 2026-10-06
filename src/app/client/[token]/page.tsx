@@ -2,10 +2,11 @@ import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatMoney, formatDate } from "@/lib/labels";
 import { SignaturePad } from "@/components/SignaturePad";
-import { signContract, requestAddons, chooseOption } from "./actions";
-import { computeProposalTotals, linesForOption, proposalOptions } from "@/lib/proposals";
+import { signContract } from "./actions";
+import { effectiveOption, linesForOption } from "@/lib/proposals";
+import { SERVICES } from "@/lib/event-details";
 import { getCurrentUser } from "@/lib/auth/roles";
-import { getPriceList, timingPolicies } from "@/lib/price-list";
+import { customQuoteReason, getPriceList, gratuityLabel, packageIncludes, tierBelow, tierFor, timingPolicies } from "@/lib/price-list";
 
 // Always build this page fresh -- it has to reflect pricing the moment it's sent.
 export const dynamic = "force-dynamic";
@@ -15,7 +16,7 @@ export default async function ClientDocumentsPage({
   searchParams,
 }: {
   params: { token: string };
-  searchParams: { error?: string; addons?: string; preview?: string; chose?: string };
+  searchParams: { error?: string; preview?: string };
 }) {
   const supabase = createAdminClient();
   const priceList = await getPriceList(supabase);
@@ -61,26 +62,27 @@ export default async function ClientDocumentsPage({
   const adminPreview = searchParams.preview === "1" && (await getCurrentUser())?.role === "admin";
   const pricingReady = Boolean(proposal && (proposal.status === "sent" || contractReady || adminPreview));
   const ready = pricingReady || contractReady;
-  const hasPackage = (items ?? []).some((i) => String(i.description).startsWith(priceList.package.name));
-  const requested: string[] = proposal?.requested_addons ?? [];
-  const contractSigned = contract?.status === "signed";
+  // The pricing page is a menu: each service they asked about with its
+  // price and description, no assumed hours or totals. The real quote is
+  // built after the planning call and shows up here once the contract is out.
+  const wanted: string[] = event.services_interested ?? [];
+  const barServices = ["signature_cocktails", "bartender", "server"];
+  const showAll = !wanted.some((s) => barServices.includes(s)) || wanted.includes("not_sure");
+  const guests = Number(event.guest_count ?? 0);
+  // Weddings, corporate events and big parties get a custom quote instead.
+  const customQuote = customQuoteReason(priceList, event.event_type, guests || null);
+  const tier = customQuote ? null : guests ? tierFor(priceList, guests) : priceList.package.tiers[0] ?? null;
+  const menu = {
+    package: showAll || wanted.includes("signature_cocktails") ? { tier, lower: tier ? tierBelow(priceList, tier) : null } : null,
+    bartender: showAll || wanted.includes("bartender"),
+    server: showAll || wanted.includes("server"),
+    other: SERVICES.filter((o) => wanted.includes(o.value) && !barServices.includes(o.value) && o.value !== "not_sure").map((o) => o.label),
+  };
 
-  // Two options (e.g. package vs bartender only): the client picks one.
+  // The final quote (after the call), using the option Faith picked if there were two.
   type Line = { id: string; description: string; line_total: number; note: string | null; option_label?: string | null };
   const lines = (items ?? []) as Line[];
-  const options = proposalOptions(lines);
-  const chosen: string | null = proposal?.chosen_option && options.includes(proposal.chosen_option) ? proposal.chosen_option : null;
-  const canChoose = options.length > 1 && !contractReady;
-  const optionTotal = (option: string) =>
-    computeProposalTotals({
-      lineTotals: linesForOption(lines, option).map((i) => Number(i.line_total)),
-      discountAmount: Number(proposal?.discount_amount ?? 0),
-      feeAmount: Number(proposal?.fee_amount ?? 0),
-      gratuityRatePercent: Number(proposal?.gratuity_rate ?? 0),
-      taxRatePercent: Number(proposal?.tax_rate ?? 0),
-    }).totalAmount;
-  const sharedLines = lines.filter((l) => !l.option_label);
-  const showTotals = options.length <= 1 || Boolean(chosen);
+  const quoteLines = linesForOption(lines, effectiveOption(lines, proposal?.chosen_option));
 
   return (
     <main style={{ padding: "2rem 1.5rem", maxWidth: 640, margin: "0 auto" }}>
@@ -111,145 +113,96 @@ export default async function ClientDocumentsPage({
                   {client?.first_name} {client?.last_name} · {formatDate(event.event_date)}
                   {event.guest_count ? ` · ${event.guest_count} guests` : ""}
                 </p>
-                <h2 style={{ margin: "0.35rem 0 0" }}>Your personalized pricing</h2>
+                <h2 style={{ margin: "0.35rem 0 0" }}>Your pricing</h2>
                 {proposal.intro_note && (
                   <p style={{ margin: "0.85rem 0 0", whiteSpace: "pre-line", lineHeight: 1.5 }}>{proposal.intro_note}</p>
                 )}
 
-                {options.length > 1 ? (
-                  <div id="options" style={{ display: "grid", gap: "1rem", marginTop: "1.25rem" }}>
-                    <p style={{ margin: 0 }}>
-                      <strong>Choose your bar service.</strong>{" "}
-                      <span style={{ color: "var(--color-muted)" }}>Pick the one that fits. You can change it until your agreement goes out.</span>
-                    </p>
-                    {searchParams.chose && <p style={{ margin: 0 }}>✓ Got it! Your total is updated below.</p>}
-                    {options.map((opt, idx) => {
-                      const isChosen = chosen === opt;
-                      return (
-                        <div
-                          key={opt}
-                          style={{
-                            border: isChosen ? "2px solid var(--color-text)" : "1px solid var(--color-border-strong)",
-                            borderRadius: 12,
-                            padding: "1rem 1.1rem",
-                            display: "grid",
-                            gap: "1rem",
-                          }}
-                        >
-                          <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", alignItems: "baseline", flexWrap: "wrap" }}>
-                            <span style={{ fontSize: "0.8rem", letterSpacing: "0.06em", color: "var(--color-muted)" }}>
-                              OPTION {String.fromCharCode(65 + idx)} · {opt.toUpperCase()}
-                            </span>
-                            {isChosen && <span className="pill pill-done">Your choice</span>}
-                          </div>
-                          {linesForOption(lines, opt)
-                            .filter((l) => l.option_label === opt)
-                            .map((item) => (
-                              <LineItem key={item.id} description={String(item.description)} total={formatMoney(item.line_total)} note={item.note} />
-                            ))}
-                          <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", alignItems: "center", flexWrap: "wrap", borderTop: "1px solid var(--color-border)", paddingTop: "0.75rem" }}>
-                            <span>
-                              Total with this option: <strong>{formatMoney(optionTotal(opt))}</strong>
-                            </span>
-                            {canChoose && !isChosen && (
-                              <form action={chooseOption}>
-                                <input type="hidden" name="token" value={params.token} />
-                                <input type="hidden" name="option" value={opt} />
-                                <button type="submit" className={chosen ? "button-secondary" : "button"} disabled={adminPreview}>
-                                  Choose this option
-                                </button>
-                              </form>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                    {sharedLines.length > 0 && (
-                      <div style={{ display: "grid", gap: "1.25rem", marginTop: "0.5rem" }}>
-                        <strong style={{ fontSize: "0.85rem", letterSpacing: "0.06em", color: "var(--color-muted)" }}>INCLUDED WITH EITHER OPTION</strong>
-                        {sharedLines.map((item) => (
-                          <LineItem key={item.id} description={String(item.description)} total={formatMoney(item.line_total)} note={item.note} />
+                <div style={{ display: "grid", gap: "1.75rem", marginTop: "1.5rem" }}>
+                  {menu.package && (
+                    <MenuItem
+                      title={priceList.package.name}
+                      price={menu.package.tier ? dollars(menu.package.tier.price) : "Custom quote"}
+                      priceNote={
+                        menu.package.tier
+                          ? `Up to ${menu.package.tier.upTo} guests · gratuity included`
+                          : "We'll price this one for you on our call"
+                      }
+                    >
+                      <ul style={listStyle}>
+                        {packageIncludes(priceList, menu.package.tier?.bartenders ?? 1).map((i) => (
+                          <li key={i}>{i}</li>
                         ))}
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div style={{ display: "grid", gap: "1.25rem", marginTop: "1.25rem" }}>
-                    {lines.map((item) => (
-                      <LineItem key={item.id} description={String(item.description)} total={formatMoney(item.line_total)} note={item.note} />
-                    ))}
-                  </div>
-                )}
+                      </ul>
+                      {menu.package.lower && (
+                        <p style={smallNote}>
+                          If your final count is {menu.package.lower.upTo} or fewer, the package is {dollars(menu.package.lower.price)}.
+                        </p>
+                      )}
+                      <p style={smallNote}>
+                        Need more time? Extra hours are {dollars(priceList.rates.bartender)}/hr per bartender + {gratuityLabel(priceList)} gratuity.
+                      </p>
+                      <p style={smallNote}>{priceList.package.fullBarNote}</p>
+                      {priceList.package.customize.length > 0 && (
+                        <>
+                          <strong style={{ display: "block", marginTop: "0.75rem", fontSize: "0.92rem" }}>Customize your package</strong>
+                          <ul style={listStyle}>
+                            {priceList.package.customize.map((c) => (
+                              <li key={c}>{c}</li>
+                            ))}
+                          </ul>
+                        </>
+                      )}
+                    </MenuItem>
+                  )}
 
-                {showTotals ? (
-                  <div style={{ marginTop: "1.25rem", paddingTop: "0.75rem", borderTop: "1px solid var(--color-border)", display: "grid", gap: "0.25rem" }}>
-                    {Number(proposal.discount_amount) > 0 && (
-                      <SummaryRow label="Discount" value={`- ${formatMoney(proposal.discount_amount)}`} />
-                    )}
-                    {Number(proposal.fee_amount) > 0 && <SummaryRow label="Fee" value={formatMoney(proposal.fee_amount)} />}
-                    {Number(proposal.tax_amount) > 0 && <SummaryRow label="Tax" value={formatMoney(proposal.tax_amount)} />}
-                    <SummaryRow label={chosen ? `Total (${chosen})` : "Total"} value={formatMoney(proposal.total_amount)} strong />
-                    {contractReady && Number(proposal.deposit_amount) > 0 && (
-                      <SummaryRow label="Retainer to book" value={formatMoney(proposal.deposit_amount)} />
-                    )}
-                    {Number(proposal.tax_amount) === 0 && (
-                      <p style={{ margin: "0.25rem 0 0", fontSize: "0.82rem", color: "var(--color-muted)" }}>Plus applicable sales tax.</p>
-                    )}
-                  </div>
-                ) : (
-                  <p style={{ marginTop: "1.25rem", fontSize: "0.88rem", color: "var(--color-muted)" }}>
-                    Totals include everything above. Plus applicable sales tax.
-                  </p>
-                )}
+                  {menu.bartender && (
+                    <MenuItem
+                      title={`${priceList.bartenderOnly.name}${menu.package ? " only" : ""}`}
+                      price={`${dollars(priceList.rates.bartender)}/hr`}
+                      priceNote={`+ ${gratuityLabel(priceList)} gratuity · ${priceList.minHours}-hour minimum (includes setup)`}
+                    >
+                      <p style={bodyText}>{priceList.bartenderOnly.description}</p>
+                      {!menu.package && priceList.bartenderOnly.note && <p style={smallNote}>{priceList.bartenderOnly.note}</p>}
+                    </MenuItem>
+                  )}
 
-                {hasPackage && (
-                  <div style={{ marginTop: "1.25rem", display: "grid", gap: "0.5rem", fontSize: "0.92rem" }}>
-                    <p style={{ margin: 0, color: "var(--color-muted)" }}>{priceList.package.fullBarNote}</p>
-                    <strong style={{ marginTop: "0.5rem" }}>Customize your package</strong>
-                    <ul style={{ margin: 0, paddingLeft: "1.1rem", display: "grid", gap: "0.25rem" }}>
-                      {priceList.package.customize.map((c) => (
-                        <li key={c}>{c}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
+                  {menu.server && (
+                    <MenuItem
+                      title={priceList.server.name}
+                      price={`${dollars(priceList.rates.server)}/hr`}
+                      priceNote={`+ ${gratuityLabel(priceList)} gratuity · ${priceList.minHours}-hour minimum (includes setup)`}
+                    >
+                      <p style={bodyText}>{priceList.server.description}</p>
+                      {priceList.server.note && <p style={smallNote}>{priceList.server.note}</p>}
+                    </MenuItem>
+                  )}
+
+                  {menu.other.length > 0 && (
+                    <p style={{ ...bodyText, margin: 0 }}>
+                      You also asked about {menu.other.join(", ").toLowerCase()}. We&apos;ll put that together for you on our call.
+                    </p>
+                  )}
+                </div>
               </section>
 
-              {!contractSigned && (
-                <section className="card" id="addons">
+              {priceList.addOns.length > 0 && (
+                <section className="card">
                   <h2 style={{ marginTop: 0 }}>Add-ons</h2>
                   <p style={{ marginTop: "-0.25rem", color: "var(--color-muted)", fontSize: "0.92rem" }}>
-                    Pricing available upon request. Check anything you&apos;re interested in and we&apos;ll add
-                    pricing for your event.
+                    Pricing on request. We&apos;ll go over anything that catches your eye on our call.
                   </p>
-                  {searchParams.addons === "requested" && (
-                    <p style={{ color: "var(--color-text)" }}>✓ Got it! We&apos;ll add pricing for those and let you know.</p>
-                  )}
-                  <form action={requestAddons} style={{ display: "grid", gap: "0.5rem" }}>
-                    <input type="hidden" name="token" value={params.token} />
+                  <ul style={listStyle}>
                     {priceList.addOns.map((a) => (
-                      <label key={a.value} style={choiceStyle}>
-                        <input type="checkbox" name="addons" value={a.value} defaultChecked={requested.includes(a.value)} style={{ marginTop: 3 }} />
-                        <span>{a.label}</span>
-                      </label>
+                      <li key={a.value}>{a.label}</li>
                     ))}
-                    <label htmlFor="addonsNote" style={{ marginTop: "0.5rem" }}>
-                      Details (optional), e.g. how many custom cups, your theme
-                    </label>
-                    <textarea id="addonsNote" name="addonsNote" rows={2} defaultValue={proposal.addons_note ?? ""} style={textareaStyle} />
-                    <button
-                      type="submit"
-                      style={{ justifySelf: "start", background: "none", border: "1px solid var(--color-accent)", color: "var(--color-accent)", borderRadius: 8, padding: "0.5rem 1rem", cursor: "pointer", fontSize: "0.95rem" }}
-                    >
-                      {requested.length > 0 ? "Update my add-on request" : "Request add-on pricing"}
-                    </button>
-                  </form>
+                  </ul>
                 </section>
               )}
 
               <section className="card">
                 <h2 style={{ marginTop: 0 }}>How timing works</h2>
-                <ul style={{ margin: 0, paddingLeft: "1.1rem", display: "grid", gap: "0.5rem", lineHeight: 1.45 }}>
+                <ul style={{ ...listStyle, gap: "0.5rem", lineHeight: 1.45 }}>
                   {timingPolicies(priceList).map((t) => (
                     <li key={t}>{t}</li>
                   ))}
@@ -260,8 +213,8 @@ export default async function ClientDocumentsPage({
                 <section className="card" style={{ textAlign: "center", borderColor: "var(--color-accent)" }}>
                   <h2 style={{ marginTop: 0 }}>Ready to book?</h2>
                   <p style={{ color: "var(--color-muted)", marginTop: 0 }}>
-                    Pick a time for a quick planning call. We&apos;ll go over the details, then send your
-                    agreement to lock in your date.
+                    Pick a time for a quick planning call. We&apos;ll go over the details, answer any questions, and then
+                    send your agreement to lock in your date.
                   </p>
                   <a href="/book" className="button">
                     Schedule my planning call
@@ -269,6 +222,28 @@ export default async function ClientDocumentsPage({
                 </section>
               )}
             </>
+          )}
+
+          {/* After the call: the actual quote Faith built, right above the agreement. */}
+          {contractReady && proposal && quoteLines.length > 0 && (
+            <section className="card">
+              <h2 style={{ marginTop: 0 }}>Your quote</h2>
+              <div style={{ display: "grid", gap: "1.25rem" }}>
+                {quoteLines.map((item) => (
+                  <LineItem key={item.id} description={String(item.description)} total={formatMoney(item.line_total)} note={item.note} />
+                ))}
+              </div>
+              <div style={{ marginTop: "1.25rem", paddingTop: "0.75rem", borderTop: "1px solid var(--color-border)", display: "grid", gap: "0.25rem" }}>
+                {Number(proposal.discount_amount) > 0 && <SummaryRow label="Discount" value={`- ${formatMoney(proposal.discount_amount)}`} />}
+                {Number(proposal.fee_amount) > 0 && <SummaryRow label="Fee" value={formatMoney(proposal.fee_amount)} />}
+                {Number(proposal.tax_amount) > 0 && <SummaryRow label="Tax" value={formatMoney(proposal.tax_amount)} />}
+                <SummaryRow label="Total" value={formatMoney(proposal.total_amount)} strong />
+                {Number(proposal.deposit_amount) > 0 && <SummaryRow label="Retainer to book" value={formatMoney(proposal.deposit_amount)} />}
+                {Number(proposal.tax_amount) === 0 && (
+                  <p style={{ margin: "0.25rem 0 0", fontSize: "0.82rem", color: "var(--color-muted)" }}>Plus applicable sales tax.</p>
+                )}
+              </div>
+            </section>
           )}
 
           {contractReady && (
@@ -351,6 +326,28 @@ export default async function ClientDocumentsPage({
     </main>
   );
 }
+
+/** Menu prices without cents when they're whole dollars ($70/hr, $1,600). */
+function dollars(n: number): string {
+  return Number.isInteger(Number(n)) ? `$${Number(n).toLocaleString("en-US")}` : formatMoney(n);
+}
+
+function MenuItem({ title, price, priceNote, children }: { title: string; price: string; priceNote: string; children: React.ReactNode }) {
+  return (
+    <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: "1.25rem" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", alignItems: "baseline" }}>
+        <strong style={{ fontSize: "1.08rem" }}>{title}</strong>
+        <strong style={{ fontSize: "1.08rem", whiteSpace: "nowrap" }}>{price}</strong>
+      </div>
+      <p style={{ margin: "0.2rem 0 0", fontSize: "0.86rem", color: "var(--color-muted)" }}>{priceNote}</p>
+      <div style={{ marginTop: "0.75rem" }}>{children}</div>
+    </div>
+  );
+}
+
+const listStyle = { margin: "0.4rem 0 0", paddingLeft: "1.1rem", display: "grid", gap: "0.25rem", fontSize: "0.93rem" } as const;
+const bodyText = { margin: 0, color: "var(--color-muted)", lineHeight: 1.5 } as const;
+const smallNote = { margin: "0.6rem 0 0", fontSize: "0.88rem", color: "var(--color-muted)" } as const;
 
 function SummaryRow({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
   return (

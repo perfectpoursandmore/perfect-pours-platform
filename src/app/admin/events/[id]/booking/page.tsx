@@ -121,7 +121,7 @@ export default async function EventBookingPage({
         <div className="notice" style={{ border: "1px solid var(--color-danger)" }}>
           <strong>One-time setup needed for package vs bartender options.</strong>
           <p style={{ margin: "0.4rem 0" }}>
-            In Supabase, open the SQL Editor, paste this in, click Run, then come back and click Save &amp; rebuild proposal:
+            In Supabase, open the SQL Editor, paste this in, click Run, then come back and click Save &amp; rebuild quote:
           </p>
           <pre style={{ margin: 0, whiteSpace: "pre-wrap", fontSize: "0.82rem", background: "#fff", padding: "0.6rem", borderRadius: 6 }}>
             {OPTIONS_SQL}
@@ -255,14 +255,14 @@ export default async function EventBookingPage({
             {!draft?.customQuote && !(contract && contract.status !== "unsent") ? (
               <>
                 <button type="submit" name="intent" value="build" className="button">
-                  {items.length > 0 ? "Save & rebuild proposal" : "Save & build proposal"}
+                  {items.length > 0 ? "Save & rebuild quote" : "Save & build quote"}
                 </button>
                 <button type="submit" name="intent" value="save" className="button-secondary">
                   Save only
                 </button>
                 {items.length > 0 && (
                   <span className="muted small">
-                    Rebuilding replaces the proposal below{pricingSent ? ", and their pricing page updates right away" : ""}.
+                    Rebuilding replaces the quote below.
                   </span>
                 )}
               </>
@@ -280,154 +280,15 @@ export default async function EventBookingPage({
         </form>
       </section>
 
-      {/* ---------- Proposal ---------- */}
-      <section className="card" id="proposal" style={{ display: "grid", gap: "1rem" }}>
-        <h2 style={h2}>Proposal</h2>
-
-        {draft && draft.headsUps.length > 0 && (
-          <div className="notice">
-            <strong className="small">Heads up (only you see this)</strong>
-            <ul style={{ margin: "0.35rem 0 0", paddingLeft: "1.1rem", display: "grid", gap: "0.2rem" }}>
-              {draft.headsUps.map((h) => (
-                <li key={h}>{h}</li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {proposalOutOfDate && optionsDbReady && (
-          <div className="notice" style={{ border: "1px solid var(--color-text)" }}>
-            This proposal was built before they checked both the package and bartender only. Click{" "}
-            <strong>Save &amp; rebuild proposal</strong> above to show both options.
-          </div>
-        )}
-
-        {items.length === 0 ? (
-          <p className="muted" style={{ margin: 0 }}>
-            No lines yet. Check the details above and click Save &amp; build proposal, or add a line yourself.
-          </p>
-        ) : (
-          <div style={{ display: "grid", gap: "1.1rem" }}>
-            {options.map((opt, idx) => (
-              <div key={opt} style={{ border: "1px solid var(--color-border)", borderRadius: 10, padding: "0.9rem 1rem" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", alignItems: "baseline", flexWrap: "wrap" }}>
-                  <strong>
-                    Option {String.fromCharCode(65 + idx)}: {opt}
-                  </strong>
-                  <span className="small">
-                    {chosen === opt && <span className="pill pill-done" style={{ marginRight: "0.5rem" }}>Chosen</span>}
-                    Total {formatMoney(totalFor(opt))}
-                  </span>
-                </div>
-                <Lines items={items.filter((i) => i.option_label === opt)} proposalId={proposal!.id} eventId={eventId} />
-              </div>
-            ))}
-            {shared.length > 0 && (
-              <div>
-                {options.length > 0 && <strong className="small">Included with either option</strong>}
-                <Lines items={shared} proposalId={proposal!.id} eventId={eventId} />
-              </div>
-            )}
-          </div>
-        )}
-
-        {options.length > 1 && proposal && (
-          <form action={setChosenOption} style={{ display: "flex", gap: "0.6rem", alignItems: "end", flexWrap: "wrap" }}>
-            <input type="hidden" name="eventId" value={eventId} />
-            <input type="hidden" name="proposalId" value={proposal.id} />
-            <div style={{ minWidth: 220 }}>
-              <label htmlFor="option">Client&apos;s choice</label>
-              <select id="option" name="option" defaultValue={chosen ?? ""}>
-                <option value="">Not picked yet</option>
-                {options.map((o) => (
-                  <option key={o} value={o}>
-                    {o}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <button type="submit" className="button-secondary">
-              Save
-            </button>
-            <span className="muted small">They can also pick on their pricing page.</span>
-          </form>
-        )}
-
-        {proposal && items.length > 0 && (
-          <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: "0.75rem", display: "grid", gap: "0.2rem" }}>
-            {options.length > 1 && !chosen && (
-              <p className="muted small" style={{ margin: "0 0 0.25rem" }}>
-                Showing totals for {shownOption} until an option is picked.
-              </p>
-            )}
-            <Row label="Subtotal" value={formatMoney(proposal.subtotal)} />
-            {Number(proposal.discount_amount) > 0 && <Row label="Discount" value={`- ${formatMoney(proposal.discount_amount)}`} />}
-            {Number(proposal.fee_amount) > 0 && <Row label="Fee" value={formatMoney(proposal.fee_amount)} />}
-            {Number(proposal.gratuity_amount) > 0 && <Row label={`Gratuity (${proposal.gratuity_rate}%)`} value={formatMoney(proposal.gratuity_amount)} />}
-            {Number(proposal.tax_amount) > 0 && <Row label="Tax" value={formatMoney(proposal.tax_amount)} />}
-            <Row label="Total" value={formatMoney(proposal.total_amount)} strong />
-            {Number(proposal.deposit_amount) > 0 && <Row label="Retainer due" value={formatMoney(proposal.deposit_amount)} />}
-          </div>
-        )}
-
-        {proposal && (
-          <div style={{ display: "flex", gap: "1.25rem", flexWrap: "wrap" }}>
-            <details>
-              <summary className="small">Add a line</summary>
-              <form action={addProposalItem} style={{ display: "grid", gap: "0.75rem", marginTop: "0.75rem", minWidth: "min(100%, 520px)" }}>
-                <input type="hidden" name="proposalId" value={proposal.id} />
-                <input type="hidden" name="eventId" value={eventId} />
-                <input type="hidden" name="pricingType" value="flat" />
-                <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: "0.75rem", alignItems: "end" }}>
-                  <AddProposalItemFields catalogItems={catalogItems ?? []} />
-                </div>
-                {options.length > 0 && (
-                  <div>
-                    <label htmlFor="optionLabel">Part of</label>
-                    <select id="optionLabel" name="optionLabel" defaultValue="">
-                      <option value="">Either option (always included)</option>
-                      {options.map((o) => (
-                        <option key={o} value={o}>
-                          {o} only
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-                <div>
-                  <button type="submit" className="button-secondary">
-                    Add line
-                  </button>
-                </div>
-              </form>
-            </details>
-
-            <details>
-              <summary className="small">Discount, fees, tax &amp; retainer</summary>
-              <form action={updateProposalAdjustments} style={{ display: "grid", gap: "0.75rem", marginTop: "0.75rem" }}>
-                <input type="hidden" name="proposalId" value={proposal.id} />
-                <input type="hidden" name="eventId" value={eventId} />
-                <div style={autoGrid}>
-                  <NumberField name="discountAmount" label="Discount ($)" value={proposal.discount_amount} />
-                  <NumberField name="feeAmount" label="Fee ($)" value={proposal.fee_amount} />
-                  <NumberField name="gratuityRate" label="Gratuity (%)" value={proposal.gratuity_rate} step="0.001" />
-                  <NumberField name="taxRate" label="Tax rate (%)" value={proposal.tax_rate} step="0.001" />
-                  <NumberField name="depositAmount" label="Retainer ($)" value={proposal.deposit_amount} />
-                </div>
-                <div>
-                  <button type="submit" className="button-secondary">
-                    Save &amp; recalculate
-                  </button>
-                </div>
-              </form>
-            </details>
-          </div>
-        )}
-      </section>
-
       {/* ---------- Send pricing ---------- */}
       <section className="card" style={{ display: "grid", gap: "0.9rem" }}>
-        <h2 style={h2}>Send pricing</h2>
+        <div>
+          <h2 style={h2}>Send pricing</h2>
+          <p className="muted small" style={{ margin: "0.25rem 0 0" }}>
+            Sends them a menu of the services they asked about, with prices and descriptions from your Price List, plus a
+            button to book a planning call.
+          </p>
+        </div>
 
         {searchParams.pricingSent && (
           <p className="small" style={{ margin: 0 }}>
@@ -506,6 +367,156 @@ export default async function EventBookingPage({
                 </button>
               </form>
             )}
+          </div>
+        )}
+      </section>
+
+      {/* ---------- Proposal ---------- */}
+      <section className="card" id="proposal" style={{ display: "grid", gap: "1rem" }}>
+        <div>
+          <h2 style={h2}>Quote</h2>
+          <p className="muted small" style={{ margin: "0.25rem 0 0" }}>
+            Build this after your planning call, once you know their hours. It goes into the contract and invoice. The client
+            only sees it once you send the contract.
+          </p>
+        </div>
+
+        {draft && draft.headsUps.length > 0 && (
+          <div className="notice">
+            <strong className="small">Heads up (only you see this)</strong>
+            <ul style={{ margin: "0.35rem 0 0", paddingLeft: "1.1rem", display: "grid", gap: "0.2rem" }}>
+              {draft.headsUps.map((h) => (
+                <li key={h}>{h}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {proposalOutOfDate && optionsDbReady && (
+          <div className="notice" style={{ border: "1px solid var(--color-text)" }}>
+            This quote was built before they checked both the package and bartender only. Click{" "}
+            <strong>Save &amp; rebuild quote</strong> above to show both options.
+          </div>
+        )}
+
+        {items.length === 0 ? (
+          <p className="muted" style={{ margin: 0 }}>
+            No quote yet. After your call, update the details above (like staff times) and click Save &amp; build quote, or add lines yourself.
+          </p>
+        ) : (
+          <div style={{ display: "grid", gap: "1.1rem" }}>
+            {options.map((opt, idx) => (
+              <div key={opt} style={{ border: "1px solid var(--color-border)", borderRadius: 10, padding: "0.9rem 1rem" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", alignItems: "baseline", flexWrap: "wrap" }}>
+                  <strong>
+                    Option {String.fromCharCode(65 + idx)}: {opt}
+                  </strong>
+                  <span className="small">
+                    {chosen === opt && <span className="pill pill-done" style={{ marginRight: "0.5rem" }}>Chosen</span>}
+                    Total {formatMoney(totalFor(opt))}
+                  </span>
+                </div>
+                <Lines items={items.filter((i) => i.option_label === opt)} proposalId={proposal!.id} eventId={eventId} />
+              </div>
+            ))}
+            {shared.length > 0 && (
+              <div>
+                {options.length > 0 && <strong className="small">Included with either option</strong>}
+                <Lines items={shared} proposalId={proposal!.id} eventId={eventId} />
+              </div>
+            )}
+          </div>
+        )}
+
+        {options.length > 1 && proposal && (
+          <form action={setChosenOption} style={{ display: "flex", gap: "0.6rem", alignItems: "end", flexWrap: "wrap" }}>
+            <input type="hidden" name="eventId" value={eventId} />
+            <input type="hidden" name="proposalId" value={proposal.id} />
+            <div style={{ minWidth: 220 }}>
+              <label htmlFor="option">Option they chose</label>
+              <select id="option" name="option" defaultValue={chosen ?? ""}>
+                <option value="">Not picked yet</option>
+                {options.map((o) => (
+                  <option key={o} value={o}>
+                    {o}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button type="submit" className="button-secondary">
+              Save
+            </button>
+          </form>
+        )}
+
+        {proposal && items.length > 0 && (
+          <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: "0.75rem", display: "grid", gap: "0.2rem" }}>
+            {options.length > 1 && !chosen && (
+              <p className="muted small" style={{ margin: "0 0 0.25rem" }}>
+                Totals shown for {shownOption} until you set which option they chose.
+              </p>
+            )}
+            <Row label="Subtotal" value={formatMoney(proposal.subtotal)} />
+            {Number(proposal.discount_amount) > 0 && <Row label="Discount" value={`- ${formatMoney(proposal.discount_amount)}`} />}
+            {Number(proposal.fee_amount) > 0 && <Row label="Fee" value={formatMoney(proposal.fee_amount)} />}
+            {Number(proposal.gratuity_amount) > 0 && <Row label={`Gratuity (${proposal.gratuity_rate}%)`} value={formatMoney(proposal.gratuity_amount)} />}
+            {Number(proposal.tax_amount) > 0 && <Row label="Tax" value={formatMoney(proposal.tax_amount)} />}
+            <Row label="Total" value={formatMoney(proposal.total_amount)} strong />
+            {Number(proposal.deposit_amount) > 0 && <Row label="Retainer due" value={formatMoney(proposal.deposit_amount)} />}
+          </div>
+        )}
+
+        {proposal && (
+          <div style={{ display: "flex", gap: "1.25rem", flexWrap: "wrap" }}>
+            <details>
+              <summary className="small">Add a line</summary>
+              <form action={addProposalItem} style={{ display: "grid", gap: "0.75rem", marginTop: "0.75rem", minWidth: "min(100%, 520px)" }}>
+                <input type="hidden" name="proposalId" value={proposal.id} />
+                <input type="hidden" name="eventId" value={eventId} />
+                <input type="hidden" name="pricingType" value="flat" />
+                <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: "0.75rem", alignItems: "end" }}>
+                  <AddProposalItemFields catalogItems={catalogItems ?? []} />
+                </div>
+                {options.length > 0 && (
+                  <div>
+                    <label htmlFor="optionLabel">Part of</label>
+                    <select id="optionLabel" name="optionLabel" defaultValue="">
+                      <option value="">Either option (always included)</option>
+                      {options.map((o) => (
+                        <option key={o} value={o}>
+                          {o} only
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <div>
+                  <button type="submit" className="button-secondary">
+                    Add line
+                  </button>
+                </div>
+              </form>
+            </details>
+
+            <details>
+              <summary className="small">Discount, fees, tax &amp; retainer</summary>
+              <form action={updateProposalAdjustments} style={{ display: "grid", gap: "0.75rem", marginTop: "0.75rem" }}>
+                <input type="hidden" name="proposalId" value={proposal.id} />
+                <input type="hidden" name="eventId" value={eventId} />
+                <div style={autoGrid}>
+                  <NumberField name="discountAmount" label="Discount ($)" value={proposal.discount_amount} />
+                  <NumberField name="feeAmount" label="Fee ($)" value={proposal.fee_amount} />
+                  <NumberField name="gratuityRate" label="Gratuity (%)" value={proposal.gratuity_rate} step="0.001" />
+                  <NumberField name="taxRate" label="Tax rate (%)" value={proposal.tax_rate} step="0.001" />
+                  <NumberField name="depositAmount" label="Retainer ($)" value={proposal.deposit_amount} />
+                </div>
+                <div>
+                  <button type="submit" className="button-secondary">
+                    Save &amp; recalculate
+                  </button>
+                </div>
+              </form>
+            </details>
           </div>
         )}
       </section>
