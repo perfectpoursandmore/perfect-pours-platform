@@ -24,7 +24,7 @@ export default async function NewEventPage({
         </p>
       </div>
 
-      {searchParams.error && <p style={{ color: "#a33" }}>{searchParams.error}</p>}
+      {searchParams.error && <p style={{ color: "var(--color-danger)" }}>{searchParams.error}</p>}
 
       <form action={createEventDirect} className="card" style={{ display: "grid", gap: "1rem" }}>
         <div>

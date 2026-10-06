@@ -177,7 +177,7 @@ export default async function StaffCalendarPage({
 
       <div style={{ display: "flex", gap: "1.25rem", flexWrap: "wrap", fontSize: "0.8rem", color: "var(--color-muted)" }}>
         <Legend swatch="var(--color-accent)" label="You're staffed on this one" />
-        <Legend swatch="#c0392b" label="Still needs someone" outline />
+        <Legend swatch="var(--color-danger)" label="Still needs someone" outline />
       </div>
 
       {(events ?? []).length === 0 ? (
@@ -203,7 +203,7 @@ function ViewTab({ href, active, label }: { href: string; active: boolean; label
         padding: "0.5rem 0.9rem",
         borderRadius: 8,
         border: "1px solid var(--color-border)",
-        background: active ? "var(--color-accent, #7a3b2e)" : "none",
+        background: active ? "var(--color-accent)" : "none",
         color: active ? "#fff" : "inherit",
         textDecoration: "none",
         fontSize: "0.9rem",
@@ -263,8 +263,8 @@ function EventChip({
         marginBottom: 2,
         textDecoration: "none",
         color: isMine ? "#fff" : "inherit",
-        background: isMine ? "var(--color-accent)" : "var(--color-highlight, #f1e9dd)",
-        border: isOpen ? "2px solid #c0392b" : "none",
+        background: isMine ? "var(--color-accent)" : "var(--color-soft)",
+        border: isOpen ? "2px solid var(--color-danger)" : "none",
         whiteSpace: "nowrap",
         overflow: "hidden",
         textOverflow: "ellipsis",
@@ -422,7 +422,7 @@ function Agenda({
               <td style={{ padding: "0.75rem 1rem" }}>{[event.venue_name, event.city].filter(Boolean).join(", ") || "—"}</td>
               <td style={{ padding: "0.75rem 1rem", fontSize: "0.8rem" }}>
                 {myEventIds.has(event.id) && <span style={{ color: "var(--color-accent)", fontWeight: 600 }}>You&apos;re on this</span>}
-                {openEventIds.has(event.id) && <span style={{ color: "#c0392b" }}>Needs someone</span>}
+                {openEventIds.has(event.id) && <span style={{ color: "var(--color-danger)" }}>Needs someone</span>}
               </td>
             </tr>
           ))}

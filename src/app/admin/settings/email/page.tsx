@@ -17,7 +17,7 @@ export default function EmailSettingsPage() {
 
       <div className="card">
         {configured ? (
-          <p style={{ margin: 0, color: "#2a7a2a" }}>
+          <p style={{ margin: 0, color: "var(--color-text)" }}>
             ✓ Configured — <code>RESEND_API_KEY</code> and <code>RESEND_FROM_EMAIL</code> are set.
           </p>
         ) : (

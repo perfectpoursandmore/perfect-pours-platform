@@ -19,8 +19,8 @@ const STATUS_LABEL: Record<string, string> = {
 
 const STATUS_COLOR: Record<string, string> = {
   pending: "var(--color-muted)",
-  available: "#2a7a2a",
-  unavailable: "#a33",
+  available: "var(--color-text)",
+  unavailable: "var(--color-danger)",
 };
 
 type PayoutRow = {
@@ -222,7 +222,7 @@ export default async function EventStaffPage({ params }: { params: { id: string 
                             padding: "0.35rem 0.5rem",
                             borderRadius: 6,
                             border: "1px solid var(--color-border)",
-                            color: ROLE_OPTIONS.includes(a.role) ? "inherit" : "#a33",
+                            color: ROLE_OPTIONS.includes(a.role) ? "inherit" : "var(--color-danger)",
                           }}
                         >
                           {(ROLE_OPTIONS.includes(a.role) ? ROLE_OPTIONS : [a.role, ...ROLE_OPTIONS]).map((role) => (

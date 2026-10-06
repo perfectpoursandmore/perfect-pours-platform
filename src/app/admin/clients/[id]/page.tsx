@@ -70,16 +70,16 @@ export default async function ClientDetailPage({
         </h1>
       </div>
 
-      {searchParams.error && <p style={{ color: "#a33" }}>{searchParams.error}</p>}
+      {searchParams.error && <p style={{ color: "var(--color-danger)" }}>{searchParams.error}</p>}
 
       {credits && credits.length > 0 && (
-        <div className="card" style={{ borderColor: credits.some((c) => !c.redeemed_at && (!c.expires_on || c.expires_on >= todayISO())) ? "#e0b84a" : undefined }}>
+        <div className="card" style={{ borderColor: credits.some((c) => !c.redeemed_at && (!c.expires_on || c.expires_on >= todayISO())) ? "var(--color-text)" : undefined }}>
           <h2 style={{ marginTop: 0, fontSize: "1rem" }}>Account credit</h2>
           <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: "0.6rem" }}>
             {credits.map((c) => {
               const expired = c.expires_on ? c.expires_on < todayISO() : false;
               const status = c.redeemed_at ? "Redeemed" : expired ? "Expired" : "Active";
-              const statusColor = c.redeemed_at ? "var(--color-muted)" : expired ? "#a33" : "#2a7a2a";
+              const statusColor = c.redeemed_at ? "var(--color-muted)" : expired ? "var(--color-danger)" : "var(--color-text)";
               return (
                 <li key={c.id} style={{ borderTop: "1px solid var(--color-border)", paddingTop: "0.6rem" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", gap: "0.75rem", flexWrap: "wrap" }}>
@@ -292,7 +292,7 @@ export default async function ClientDetailPage({
               <li key={e.id} style={{ borderTop: "1px solid var(--color-border)", paddingTop: "0.5rem", fontSize: "0.9rem" }}>
                 <div style={{ display: "flex", justifyContent: "space-between" }}>
                   <span>{e.subject}</span>
-                  <span style={{ color: e.status === "sent" ? "#2a7a2a" : "#a33" }}>
+                  <span style={{ color: e.status === "sent" ? "var(--color-text)" : "var(--color-danger)" }}>
                     {e.status === "sent" ? "Sent" : "Failed"}
                   </span>
                 </div>

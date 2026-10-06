@@ -190,7 +190,7 @@ export function InquiryForm() {
         </div>
       </Section>
 
-      {error && <p style={{ color: "#a33", margin: 0 }}>{error}</p>}
+      {error && <p style={{ color: "var(--color-danger)", margin: 0 }}>{error}</p>}
 
       <button type="submit" className="button" disabled={submitting} style={{ justifySelf: "start" }}>
         {submitting ? "Sending…" : "Get my pricing"}

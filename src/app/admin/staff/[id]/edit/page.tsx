@@ -31,7 +31,7 @@ export default async function EditStaffPage({
         </h1>
       </div>
 
-      {searchParams.error && <p style={{ color: "#a33" }}>{searchParams.error}</p>}
+      {searchParams.error && <p style={{ color: "var(--color-danger)" }}>{searchParams.error}</p>}
 
       <form action={updateStaffMember} className="card" style={{ display: "grid", gap: "1rem" }}>
         <input type="hidden" name="staffId" value={staff.id} />

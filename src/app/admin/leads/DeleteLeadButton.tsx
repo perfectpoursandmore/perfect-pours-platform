@@ -15,8 +15,8 @@ export function DeleteLeadButton({ leadName }: { leadName: string }) {
       }}
       style={{
         background: "none",
-        border: "1px solid #a33",
-        color: "#a33",
+        border: "1px solid var(--color-danger)",
+        color: "var(--color-danger)",
         borderRadius: 8,
         padding: "0.6rem 1.1rem",
         cursor: "pointer",

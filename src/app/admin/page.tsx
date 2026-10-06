@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { LEAD_STATUS_LABELS, formatDate, formatDateTime } from "@/lib/labels";
-import { customQuoteReason } from "@/lib/price-list";
+import { customQuoteReason, getPriceList } from "@/lib/price-list";
 import { addDashboardNote, removeDashboardNote, addTodo, toggleTodo, removeTodo } from "./actions";
 
 function todayISO() {
@@ -48,6 +48,7 @@ type TodoRow = {
 
 export default async function AdminDashboardPage() {
   const supabase = createClient();
+  const priceList = await getPriceList(supabase);
 
   const [
     { data: thisWeeksEvents },
@@ -107,7 +108,7 @@ export default async function AdminDashboardPage() {
   const holds = upcoming.filter((e) => holdIds.has(e.id));
   const needsPricing = holds
     .filter((e) => !(e.proposals ?? []).some((p) => p.sent_at))
-    .map((e) => ({ ...e, waiting: daysSince(e.created_at), customQuote: customQuoteReason(e.event_type, e.guest_count) }));
+    .map((e) => ({ ...e, waiting: daysSince(e.created_at), customQuote: customQuoteReason(priceList, e.event_type, e.guest_count) }));
   const needsCheckIn = holds
     .map((e) => {
       const sent = (e.proposals ?? [])
@@ -144,7 +145,7 @@ export default async function AdminDashboardPage() {
                         — event {formatDate(e.event_date)} · came in {ago(e.waiting)}
                       </span>
                       {e.customQuote && (
-                        <span style={{ marginLeft: "0.4rem", fontSize: "0.78rem", padding: "0.05rem 0.4rem", borderRadius: 4, background: "#f1e9dd" }}>
+                        <span style={{ marginLeft: "0.4rem", fontSize: "0.78rem", padding: "0.05rem 0.4rem", borderRadius: 4, background: "var(--color-soft)" }}>
                           custom quote
                         </span>
                       )}

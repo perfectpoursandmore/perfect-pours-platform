@@ -29,16 +29,16 @@ export default async function QuickBooksSettingsPage({
       </div>
 
       {searchParams.connected && (
-        <p style={{ color: "#2a7a2a" }}>QuickBooks connected successfully.</p>
+        <p style={{ color: "var(--color-text)" }}>QuickBooks connected successfully.</p>
       )}
-      {searchParams.error && <p style={{ color: "#a33" }}>{searchParams.error}</p>}
+      {searchParams.error && <p style={{ color: "var(--color-danger)" }}>{searchParams.error}</p>}
 
       {needsReconnect && (
         <div
           className="card"
-          style={{ background: "#fdf1f1", border: "1px solid #e3b6b6" }}
+          style={{ background: "var(--color-soft)", border: "1px solid var(--color-border-strong)" }}
         >
-          <p style={{ margin: "0 0 0.75rem", fontWeight: 600, color: "#a33" }}>
+          <p style={{ margin: "0 0 0.75rem", fontWeight: 600, color: "var(--color-danger)" }}>
             ⚠ QuickBooks needs to be reconnected
           </p>
           <p style={{ margin: "0 0 1rem" }}>

@@ -1,9 +1,13 @@
 :root {
-  --color-bg: #faf9f7;
-  --color-text: #1f1b16;
-  --color-muted: #6b6259;
-  --color-accent: #7a3b2e;
-  --color-border: #e4ddd3;
+  /* Black and white. Every page pulls its colors from these. */
+  --color-bg: #ffffff;
+  --color-text: #111111;
+  --color-muted: #6e6e6e;
+  --color-accent: #111111;
+  --color-border: #e6e6e6;
+  --color-border-strong: #cfcfcf;
+  --color-soft: #f5f5f5;
+  --color-danger: #b42318; /* only for errors and "needs attention" */
 }
 
 * {
@@ -15,16 +19,36 @@ body {
   background: var(--color-bg);
   color: var(--color-text);
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1 {
+  font-size: 1.6rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+h2 {
+  font-weight: 600;
 }
 
 a {
-  color: var(--color-accent);
+  color: var(--color-text);
+  text-underline-offset: 2px;
+}
+
+code {
+  background: var(--color-soft);
+  border-radius: 4px;
+  padding: 0.1rem 0.3rem;
+  font-size: 0.85em;
 }
 
 .card {
   background: #fff;
   border: 1px solid var(--color-border);
-  border-radius: 10px;
+  border-radius: 12px;
   padding: 1.5rem;
 }
 
@@ -32,20 +56,107 @@ a {
   display: inline-block;
   background: var(--color-accent);
   color: #fff;
-  border: none;
-  border-radius: 8px;
-  padding: 0.6rem 1.1rem;
-  font-size: 0.95rem;
+  border: 1px solid var(--color-accent);
+  border-radius: 999px;
+  padding: 0.55rem 1.2rem;
+  font-size: 0.92rem;
+  font-weight: 500;
   cursor: pointer;
   text-decoration: none;
 }
 
-input {
+.button:hover {
+  background: #333;
+}
+
+.button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Quieter button for secondary actions. */
+.button-secondary {
+  display: inline-block;
+  background: #fff;
+  color: var(--color-text);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 999px;
+  padding: 0.5rem 1.05rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.button-secondary:hover {
+  border-color: var(--color-text);
+}
+
+/* Text-style button (e.g. "Remove"). */
+.link-button {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--color-muted);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.muted {
+  color: var(--color-muted);
+}
+
+.small {
+  font-size: 0.85rem;
+}
+
+/* A gentle grey box for tips and heads-ups. */
+.notice {
+  background: var(--color-soft);
+  border-radius: 10px;
+  padding: 0.75rem 1rem;
+  font-size: 0.9rem;
+}
+
+.pill {
+  display: inline-block;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 999px;
+  padding: 0.1rem 0.6rem;
+  font-size: 0.78rem;
+  color: var(--color-text);
+  white-space: nowrap;
+}
+
+.pill-done {
+  background: var(--color-text);
+  border-color: var(--color-text);
+  color: #fff;
+}
+
+input,
+select,
+textarea {
   width: 100%;
   padding: 0.55rem 0.7rem;
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-border-strong);
   border-radius: 8px;
   font-size: 0.95rem;
+  font-family: inherit;
+  background: #fff;
+  color: var(--color-text);
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: 2px solid var(--color-text);
+  outline-offset: -1px;
+}
+
+details > summary {
+  cursor: pointer;
 }
 
 /* Checkboxes/radios must NOT inherit the 100%-width text-input styling
@@ -60,6 +171,7 @@ input[type="radio"] {
   border: none;
   border-radius: 0;
   font-size: inherit;
+  accent-color: var(--color-text);
 }
 
 label {
@@ -75,7 +187,8 @@ label {
 }
 
 .role-shell-aside {
-  width: 220px;
+  width: 210px;
+  background: #fff;
   flex-shrink: 0;
   border-right: 1px solid var(--color-border);
   padding: 1.25rem 1rem;
@@ -86,7 +199,18 @@ label {
 
 .role-shell-nav {
   display: grid;
-  gap: 0.5rem;
+  gap: 0.15rem;
+}
+
+.role-shell-nav a {
+  color: var(--color-text);
+  text-decoration: none;
+  padding: 0.35rem 0.6rem;
+  border-radius: 8px;
+}
+
+.role-shell-nav a:hover {
+  background: var(--color-soft);
 }
 
 .role-shell-main {

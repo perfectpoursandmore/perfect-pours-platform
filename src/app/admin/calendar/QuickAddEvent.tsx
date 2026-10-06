@@ -99,7 +99,7 @@ export function QuickAddEvent({
               </button>
             </div>
 
-            {error && <p style={{ margin: 0, color: "#a33", fontSize: "0.9rem" }}>{error}</p>}
+            {error && <p style={{ margin: 0, color: "var(--color-danger)", fontSize: "0.9rem" }}>{error}</p>}
 
             <form onSubmit={handleSubmit} style={{ display: "grid", gap: "0.85rem" }}>
               <div>

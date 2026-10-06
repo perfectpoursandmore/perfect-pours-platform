@@ -27,7 +27,7 @@ export default async function LeadDetailPage({
         </h1>
       </div>
 
-      {searchParams.error && <p style={{ color: "#a33" }}>{searchParams.error}</p>}
+      {searchParams.error && <p style={{ color: "var(--color-danger)" }}>{searchParams.error}</p>}
 
       <div className="card" style={{ display: "grid", gap: "0.5rem" }}>
         <Row label="Email" value={lead.email} />

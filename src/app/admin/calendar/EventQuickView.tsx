@@ -163,7 +163,7 @@ export function EventQuickView() {
         style={{ width: "100%", maxWidth: 520, display: "grid", gap: "1rem" }}
       >
         {loading && <p style={{ margin: 0 }}>Loading…</p>}
-        {error && <p style={{ margin: 0, color: "#a33" }}>{error}</p>}
+        {error && <p style={{ margin: 0, color: "var(--color-danger)" }}>{error}</p>}
 
         {data && (
           <>
@@ -264,7 +264,7 @@ export function EventQuickView() {
                               borderRadius: 6,
                               border: "1px solid var(--color-border)",
                               fontSize: "0.85rem",
-                              color: roleIsValid ? "inherit" : "#a33",
+                              color: roleIsValid ? "inherit" : "var(--color-danger)",
                             }}
                           >
                             {(roleIsValid ? ROLE_OPTIONS : [a.role, ...ROLE_OPTIONS]).map((role) => (

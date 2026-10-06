@@ -9,7 +9,6 @@ import {
   notifyStaffOfEventTime,
 } from "../actions";
 import { DeleteEventButton } from "../DeleteEventButton";
-import { DISHWARE, EXTRA_HELP, SERVICES, SERVICE_STYLES, type Option } from "@/lib/event-details";
 
 export default async function EventOverviewPage({
   params,
@@ -46,9 +45,9 @@ export default async function EventOverviewPage({
 
   return (
     <>
-      {searchParams.error && <p style={{ color: "#a33" }}>{searchParams.error}</p>}
+      {searchParams.error && <p style={{ color: "var(--color-danger)" }}>{searchParams.error}</p>}
       {searchParams.notified !== undefined && (
-        <p style={{ color: "#2a7a2a" }}>
+        <p style={{ color: "var(--color-text)" }}>
           {Number(searchParams.notified) > 0
             ? `Notified ${searchParams.notified} staff member${Number(searchParams.notified) === 1 ? "" : "s"} of the current time.`
             : "No one with an email on file was assigned to notify."}
@@ -189,49 +188,10 @@ export default async function EventOverviewPage({
         </div>
       </div>
 
-      <hr style={{ border: "none", borderTop: "1px solid var(--color-border)" }} />
-      <div>
-        <h2 style={{ margin: 0, fontSize: "1rem" }}>Event details (for pricing and staffing)</h2>
-        <p style={{ margin: "0.25rem 0 0", fontSize: "0.85rem", color: "var(--color-muted)" }}>
-          Filled in automatically when a client uses the website form. After a call or text,
-          check these off yourself.
-        </p>
-      </div>
-
-      <div>
-        <span style={detailHeading}>Interested in</span>
-        <CheckGrid name="services" options={SERVICES} selected={event.services_interested ?? []} />
-      </div>
-
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
-        <div>
-          <label htmlFor="serviceStyle">Food service</label>
-          <select id="serviceStyle" name="serviceStyle" defaultValue={event.service_style ?? ""} style={selectStyle}>
-            <option value="">—</option>
-            {SERVICE_STYLES.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label htmlFor="dishware">Dishware</label>
-          <select id="dishware" name="dishware" defaultValue={event.dishware ?? ""} style={selectStyle}>
-            <option value="">—</option>
-            {DISHWARE.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      <div>
-        <span style={detailHeading}>Extra help needed</span>
-        <CheckGrid name="extraHelp" options={EXTRA_HELP} selected={event.extra_help ?? []} />
-      </div>
+      <p className="notice" style={{ margin: 0 }}>
+        Services, food style and what they asked for are on the{" "}
+        <a href={`/admin/events/${event.id}/booking`}>Booking tab</a>, right next to the proposal.
+      </p>
 
       <hr style={{ border: "none", borderTop: "1px solid var(--color-border)" }} />
       <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--color-muted)" }}>
@@ -315,8 +275,8 @@ export default async function EventOverviewPage({
         </form>
       </div>
 
-      <div className="card" style={{ display: "grid", gap: "0.75rem", borderColor: "#a33" }}>
-        <h2 style={{ marginTop: 0, fontSize: "1rem", color: "#a33" }}>Delete event</h2>
+      <div className="card" style={{ display: "grid", gap: "0.75rem", borderColor: "var(--color-danger)" }}>
+        <h2 style={{ marginTop: 0, fontSize: "1rem", color: "var(--color-danger)" }}>Delete event</h2>
         <p style={{ margin: 0, color: "var(--color-muted)", fontSize: "0.9rem" }}>
           For an accidental duplicate or a mistake — this permanently removes the event and
           everything tied to it (staffing, proposal, contract). For a real cancellation, use the
@@ -331,32 +291,3 @@ export default async function EventOverviewPage({
   );
 }
 
-const selectStyle = {
-  width: "100%",
-  padding: "0.55rem 0.7rem",
-  borderRadius: 8,
-  border: "1px solid var(--color-border)",
-} as const;
-
-const detailHeading = {
-  display: "block",
-  fontSize: "0.85rem",
-  color: "var(--color-muted)",
-  marginBottom: "0.4rem",
-} as const;
-
-function CheckGrid({ name, options, selected }: { name: string; options: Option[]; selected: string[] }) {
-  return (
-    <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem 1.25rem" }}>
-      {options.map((o) => (
-        <label
-          key={o.value}
-          style={{ display: "flex", alignItems: "center", gap: "0.4rem", margin: 0, color: "var(--color-text)", fontSize: "0.92rem" }}
-        >
-          <input type="checkbox" name={name} value={o.value} defaultChecked={selected.includes(o.value)} />
-          {o.label}
-        </label>
-      ))}
-    </div>
-  );
-}

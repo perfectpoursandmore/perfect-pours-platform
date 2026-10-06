@@ -4,7 +4,8 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/roles";
-import { computeProposalTotals } from "@/lib/proposals";
+import { effectiveOption, linesForOption, proposalOptions } from "@/lib/proposals";
+import { recomputeProposalTotals } from "@/lib/proposal-totals";
 import { renderContractBody } from "@/lib/contracts";
 import { EVENT_TYPE_LABELS, formatMoney, formatDate } from "@/lib/labels";
 import { upsertEventFinancials, maybeMarkEventBooked } from "@/lib/event-financials";
@@ -15,7 +16,11 @@ import {
   getInvoiceStatus,
 } from "@/lib/quickbooks";
 import { isEmailConfigured, sendEmail, sendTemplatedEmail } from "@/lib/email";
+import { getPriceList } from "@/lib/price-list";
 import { buildDraftProposal } from "@/lib/auto-proposal";
+import { DISHWARE, EXTRA_HELP, SERVICES, SERVICE_STYLES, cleanValue, cleanValues } from "@/lib/event-details";
+import { zonedTimeToIso } from "@/lib/calendar-dates";
+import { syncEventToGoogle } from "@/lib/google-event-sync";
 
 async function requireAdmin() {
   const user = await getCurrentUser();
@@ -42,6 +47,7 @@ export async function addProposalItem(formData: FormData) {
   const quantity = Number(formData.get("quantity") ?? 1);
   const unitPrice = Number(formData.get("unitPrice") ?? 0);
   const pricingType = String(formData.get("pricingType") ?? "flat");
+  const optionLabel = String(formData.get("optionLabel") ?? "").trim() || null;
 
   if (!description) return;
 
@@ -59,6 +65,7 @@ export async function addProposalItem(formData: FormData) {
     pricing_type: pricingType,
     line_total: Math.round(quantity * unitPrice * 100) / 100,
     sort_order: count ?? 0,
+    ...(optionLabel ? { option_label: optionLabel } : {}),
   });
 
   await recomputeAndSaveProposalTotals(supabase, proposalId);
@@ -103,34 +110,7 @@ async function recomputeAndSaveProposalTotals(
   supabase: ReturnType<typeof createClient>,
   proposalId: string
 ) {
-  const { data: proposal } = await supabase
-    .from("proposals")
-    .select("discount_amount, fee_amount, gratuity_rate, tax_rate")
-    .eq("id", proposalId)
-    .single();
-
-  const { data: items } = await supabase
-    .from("proposal_items")
-    .select("line_total")
-    .eq("proposal_id", proposalId);
-
-  const totals = computeProposalTotals({
-    lineTotals: (items ?? []).map((i) => Number(i.line_total)),
-    discountAmount: Number(proposal?.discount_amount ?? 0),
-    feeAmount: Number(proposal?.fee_amount ?? 0),
-    gratuityRatePercent: Number(proposal?.gratuity_rate ?? 0),
-    taxRatePercent: Number(proposal?.tax_rate ?? 0),
-  });
-
-  await supabase
-    .from("proposals")
-    .update({
-      subtotal: totals.subtotal,
-      gratuity_amount: totals.gratuityAmount,
-      tax_amount: totals.taxAmount,
-      total_amount: totals.totalAmount,
-    })
-    .eq("id", proposalId);
+  await recomputeProposalTotals(supabase, proposalId);
 }
 
 export async function generateContract(formData: FormData) {
@@ -155,10 +135,20 @@ export async function generateContract(formData: FormData) {
     redirect(`/admin/events/${eventId}/booking?error=Create a proposal before generating a contract.`);
   }
 
-  const { data: items } = await supabase
+  const { data: allItems } = await supabase
     .from("proposal_items")
-    .select("description, quantity, line_total")
-    .eq("proposal_id", proposal!.id);
+    .select("*")
+    .eq("proposal_id", proposal!.id)
+    .order("sort_order");
+  const options = proposalOptions(allItems ?? []);
+  if (options.length > 1 && !(proposal!.chosen_option && options.includes(proposal!.chosen_option))) {
+    redirect(
+      `/admin/events/${eventId}/booking?error=${encodeURIComponent(
+        "The proposal has two options. Pick the one the client chose (in the proposal section) before generating the contract."
+      )}`
+    );
+  }
+  const items = linesForOption(allItems ?? [], effectiveOption(allItems ?? [], proposal!.chosen_option));
 
   const client = Array.isArray(event!.clients) ? event!.clients[0] : event!.clients;
   // Price leads each entry (rather than trailing after the description) so a
@@ -512,7 +502,12 @@ export async function autoBuildProposal(formData: FormData) {
   const supabase = createClient();
   const eventId = String(formData.get("eventId"));
   const proposalId = String(formData.get("proposalId"));
+  await buildProposalFromDetails(supabase, eventId, proposalId);
+  revalidatePath(`/admin/events/${eventId}/booking`);
+}
 
+async function buildProposalFromDetails(supabase: ReturnType<typeof createClient>, eventId: string, proposalId: string) {
+  const back = `/admin/events/${eventId}/booking`;
   const [{ data: event }, { data: proposal }] = await Promise.all([
     supabase
       .from("events")
@@ -522,32 +517,96 @@ export async function autoBuildProposal(formData: FormData) {
     supabase.from("proposals").select("id, status").eq("id", proposalId).single(),
   ]);
 
-  if (!event || !proposal) redirect(`/admin/events/${eventId}/booking?error=Couldn't load this event.`);
+  if (!event || !proposal) redirect(`${back}?error=Couldn't load this event.`);
   if (proposal!.status === "sent") {
-    redirect(`/admin/events/${eventId}/booking?error=Pricing was already sent, so edit the lines by hand instead.`);
+    redirect(`${back}?error=Pricing was already sent, so edit the lines by hand instead.`);
   }
 
-  const draft = buildDraftProposal(event!);
+  const draft = buildDraftProposal(event!, await getPriceList(supabase));
   if (draft.customQuote) {
-    redirect(`/admin/events/${eventId}/booking?error=${encodeURIComponent(`${draft.customQuote}: build this custom quote by hand.`)}`);
+    redirect(`${back}?error=${encodeURIComponent(`${draft.customQuote}: build this custom quote by hand.`)}`);
   }
 
   await supabase.from("proposal_items").delete().eq("proposal_id", proposalId);
   if (draft.lines.length > 0) {
-    await supabase.from("proposal_items").insert(
-      draft.lines.map((l, i) => ({
-        proposal_id: proposalId,
-        description: l.description,
-        quantity: l.quantity,
-        unit_price: l.unit_price,
-        line_total: l.line_total,
-        pricing_type: "flat",
-        note: l.note,
-        sort_order: i,
-      }))
-    );
+    const rows = draft.lines.map((l, i) => ({
+      proposal_id: proposalId,
+      description: l.description,
+      quantity: l.quantity,
+      unit_price: l.unit_price,
+      line_total: l.line_total,
+      pricing_type: "flat",
+      note: l.note,
+      sort_order: i,
+      ...(l.option ? { option_label: l.option } : {}),
+    }));
+    const { error } = await supabase.from("proposal_items").insert(rows);
+    if (error && draft.lines.some((l) => l.option)) {
+      redirect(
+        `${back}?error=${encodeURIComponent(
+          "This proposal has two options, which needs a quick database update first. Run supabase/migrations/0022_proposal_options.sql in the Supabase SQL Editor, then build again."
+        )}`
+      );
+    }
+  }
+  // A fresh proposal starts with no option picked.
+  await supabase.from("proposals").update({ chosen_option: null, option_chosen_at: null }).eq("id", proposalId);
+
+  await recomputeAndSaveProposalTotals(supabase, proposalId);
+}
+
+/**
+ * The client's answers (services, food style, times...) edited right on the
+ * Booking tab, so Faith can tweak them and rebuild the proposal in one go.
+ */
+export async function saveEventDetails(formData: FormData) {
+  await requireAdmin();
+  const supabase = createClient();
+  const eventId = String(formData.get("eventId"));
+  const proposalId = String(formData.get("proposalId") ?? "");
+  const back = `/admin/events/${eventId}/booking`;
+
+  const { data: event } = await supabase.from("events").select("event_date").eq("id", eventId).single();
+  if (!event) redirect(`${back}?error=Couldn't load this event.`);
+  const date = event!.event_date as string;
+  const guestRaw = String(formData.get("guestCount") ?? "").trim();
+
+  await supabase
+    .from("events")
+    .update({
+      guest_count: guestRaw ? Number(guestRaw) : null,
+      staff_arrival_time: zonedTimeToIso(date, String(formData.get("staffArrivalTime") ?? "")),
+      guest_arrival_time: zonedTimeToIso(date, String(formData.get("guestArrivalTime") ?? "")),
+      staff_end_time: zonedTimeToIso(date, String(formData.get("staffEndTime") ?? "")),
+      services_interested: cleanValues(SERVICES, formData.getAll("services")),
+      service_style: cleanValue(SERVICE_STYLES, formData.get("serviceStyle")),
+      dishware: cleanValue(DISHWARE, formData.get("dishware")),
+      extra_help: cleanValues(EXTRA_HELP, formData.getAll("extraHelp")),
+    })
+    .eq("id", eventId);
+  await syncEventToGoogle(eventId);
+
+  if (formData.get("intent") === "build" && proposalId) {
+    await buildProposalFromDetails(supabase, eventId, proposalId);
   }
 
+  revalidatePath(back);
+  revalidatePath(`/admin/events/${eventId}`);
+  redirect(`${back}${formData.get("intent") === "build" ? "#proposal" : "?detailsSaved=1"}`);
+}
+
+/** Faith records which option the client went with (e.g. after a call). */
+export async function setChosenOption(formData: FormData) {
+  await requireAdmin();
+  const supabase = createClient();
+  const eventId = String(formData.get("eventId"));
+  const proposalId = String(formData.get("proposalId"));
+  const option = String(formData.get("option") ?? "").trim() || null;
+
+  await supabase
+    .from("proposals")
+    .update({ chosen_option: option, option_chosen_at: option ? new Date().toISOString() : null })
+    .eq("id", proposalId);
   await recomputeAndSaveProposalTotals(supabase, proposalId);
   revalidatePath(`/admin/events/${eventId}/booking`);
 }
@@ -604,7 +663,7 @@ export async function sendPricing(formData: FormData) {
         subject: "Your personalized pricing — Perfect Pours & More",
         html: `<p>Hi ${escapeHtml(client.first_name ?? "")},</p>
 <p>Your personalized pricing for your ${escapeHtml(typeLabel)} on ${formatDate(event.event_date)} is ready! Everything is in one place here:</p>
-<p><a href="${link}" style="display:inline-block;background:#7a3b2e;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none">View my pricing</a></p>
+<p><a href="${link}" style="display:inline-block;background:#111111;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none">View my pricing</a></p>
 <p>When you're ready to move forward, you can book a quick planning call right from that page.</p>
 <p>Cheers,<br>Faith<br>Perfect Pours &amp; More</p>`,
       });
@@ -632,4 +691,108 @@ export async function markAddonsHandled(formData: FormData) {
 
 function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+}
+
+/**
+ * Booking status, set by hand -- for events booked before the app existed
+ * (paper contract, retainer by Venmo/Zelle, pricing sent from the old
+ * Google Doc). Whatever Faith picks here is what the app goes by.
+ */
+export async function updateBookingStatus(formData: FormData) {
+  await requireAdmin();
+  const supabase = createClient();
+  const eventId = String(formData.get("eventId"));
+  const back = `/admin/events/${eventId}/booking`;
+
+  const pick = (k: string, allowed: string[]) => {
+    const v = String(formData.get(k) ?? "");
+    return allowed.includes(v) ? v : null;
+  };
+  let eventStatus = pick("eventStatus", ["inquiry", "booked", "completed", "cancelled"]);
+  const pricing = pick("pricing", ["unsent", "sent"]);
+  const contractStatus = pick("contract", ["unsent", "sent", "signed"]);
+  const retainer = pick("retainer", ["outstanding", "received"]);
+  const balance = pick("balance", ["outstanding", "paid"]);
+  const amount = (k: string) => {
+    const raw = String(formData.get(k) ?? "").replace(/[$,\s]/g, "");
+    if (raw === "") return undefined;
+    const n = Number(raw);
+    return Number.isFinite(n) && n >= 0 ? n : NaN;
+  };
+  const total = amount("totalAmount");
+  const deposit = amount("depositAmount");
+  if (Number.isNaN(total) || Number.isNaN(deposit)) {
+    redirect(`${back}?error=${encodeURIComponent("Total and retainer need to be numbers.")}`);
+  }
+
+  const [{ data: event }, { data: contract }, { data: proposal }] = await Promise.all([
+    supabase.from("events").select("status").eq("id", eventId).single(),
+    supabase.from("contracts").select("status").eq("event_id", eventId).order("created_at", { ascending: false }).limit(1).maybeSingle(),
+    supabase.from("proposals").select("id, status, sent_at").eq("event_id", eventId).order("created_at", { ascending: false }).limit(1).maybeSingle(),
+  ]);
+  if (!event) redirect(`${back}?error=${encodeURIComponent("Couldn't load this event.")}`);
+
+  // Contract: only store a hand-set value when it differs from what the app
+  // already knows, so a real in-app contract keeps driving things.
+  const appContractStatus = contract?.status ?? "unsent";
+  const contractManual = contractStatus && contractStatus !== appContractStatus ? contractStatus : null;
+  const effectiveContract = contractManual ?? appContractStatus;
+
+  // Contract signed + retainer in = booked, unless Faith picked something else.
+  if (eventStatus === "inquiry" && event!.status === "inquiry" && effectiveContract === "signed" && retainer === "received") {
+    eventStatus = "booked";
+  }
+
+  const patch: Parameters<typeof upsertEventFinancials>[2] = {
+    proposal_sent: pricing === "sent",
+    contract_signed: effectiveContract === "signed",
+    deposit_paid: retainer === "received",
+    balance_paid: balance === "paid",
+  };
+  if (total !== undefined) patch.total_amount = total;
+  if (deposit !== undefined) patch.deposit_amount = deposit;
+  if (total !== undefined || deposit !== undefined) {
+    const { data: fin } = await supabase.from("event_financials").select("total_amount, deposit_amount").eq("event_id", eventId).maybeSingle();
+    const t = total ?? Number(fin?.total_amount ?? 0);
+    const d = deposit ?? Number(fin?.deposit_amount ?? 0);
+    patch.balance_amount = Math.max(0, Math.round((t - d) * 100) / 100);
+  }
+  await upsertEventFinancials(supabase, eventId, patch);
+
+  const { error: manualError } = await supabase
+    .from("event_financials")
+    .update({ contract_status_manual: contractManual })
+    .eq("event_id", eventId);
+  if (manualError && contractManual) {
+    console.error("updateBookingStatus:", manualError);
+    redirect(
+      `${back}?error=${encodeURIComponent(
+        "Saved everything except the contract status. Run supabase/migrations/0021_manual_booking_status.sql in the Supabase SQL Editor, then save again."
+      )}`
+    );
+  }
+
+  // Pricing: keep the proposal in step so the dashboard's follow-up lists
+  // (and the client's pricing page) agree with what's set here.
+  if (proposal && pricing) {
+    if (pricing === "sent" && proposal.status !== "sent") {
+      await supabase
+        .from("proposals")
+        .update({ status: "sent", sent_at: proposal.sent_at ?? new Date().toISOString() })
+        .eq("id", proposal.id);
+    } else if (pricing === "unsent" && proposal.status === "sent") {
+      await supabase.from("proposals").update({ status: "draft", sent_at: null }).eq("id", proposal.id);
+    }
+  }
+
+  if (eventStatus && eventStatus !== event!.status) {
+    await supabase.from("events").update({ status: eventStatus }).eq("id", eventId);
+    await syncEventToGoogle(eventId);
+  }
+
+  revalidatePath(back);
+  revalidatePath(`/admin/events/${eventId}`);
+  revalidatePath("/admin/events");
+  revalidatePath("/admin");
+  redirect(`${back}?statusSaved=1`);
 }

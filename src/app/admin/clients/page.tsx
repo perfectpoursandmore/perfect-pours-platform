@@ -59,8 +59,8 @@ export default async function ClientsPage() {
                       {credit ? (
                         <span
                           style={{
-                            background: "#fdf3d9",
-                            color: "#7a5c1e",
+                            background: "var(--color-soft)",
+                            color: "var(--color-text)",
                             borderRadius: 999,
                             padding: "0.15rem 0.6rem",
                             fontSize: "0.82rem",

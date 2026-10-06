@@ -149,7 +149,7 @@ export function BookingFlow() {
   if (loadError) {
     return (
       <div className="card" style={{ maxWidth: 480 }}>
-        <p style={{ color: "#a33" }}>{loadError}</p>
+        <p style={{ color: "var(--color-danger)" }}>{loadError}</p>
       </div>
     );
   }
@@ -225,7 +225,7 @@ export function BookingFlow() {
         </strong>
       </div>
 
-      {submitError && <p style={{ color: "#a33", margin: 0 }}>{submitError}</p>}
+      {submitError && <p style={{ color: "var(--color-danger)", margin: 0 }}>{submitError}</p>}
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
         <div>

@@ -10,8 +10,8 @@ const STATUS_LABEL: Record<string, string> = {
 
 const STATUS_COLOR: Record<string, string> = {
   pending: "var(--color-muted)",
-  available: "#2a7a2a",
-  unavailable: "#a33",
+  available: "var(--color-text)",
+  unavailable: "var(--color-danger)",
 };
 
 function todayISO() {

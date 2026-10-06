@@ -4,9 +4,11 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { upsertEventFinancials, maybeMarkEventBooked } from "@/lib/event-financials";
-import { ADD_ONS } from "@/lib/price-list";
+import { getPriceList } from "@/lib/price-list";
 import { isEmailConfigured, sendEmail } from "@/lib/email";
-import { formatDate } from "@/lib/labels";
+import { formatDate, formatMoney } from "@/lib/labels";
+import { proposalOptions } from "@/lib/proposals";
+import { recomputeProposalTotals } from "@/lib/proposal-totals";
 
 /**
  * Public — reached only via the unguessable per-event token, never an
@@ -54,6 +56,9 @@ export async function signContract(formData: FormData) {
     .eq("id", contract!.id);
 
   await upsertEventFinancials(supabase, event.id, { contract_signed: true });
+  // A real signature replaces any status Faith set by hand. (Separate call so
+  // signing still works if the 0021 migration hasn't been run yet.)
+  await supabase.from("event_financials").update({ contract_status_manual: null }).eq("event_id", event.id);
   await maybeMarkEventBooked(supabase, event.id);
 
   revalidatePath(`/client/${token}`);
@@ -68,7 +73,9 @@ export async function requestAddons(formData: FormData) {
   const token = String(formData.get("token") ?? "");
   if (!token) redirect("/");
 
-  const allowed = new Set(ADD_ONS.map((a) => a.value));
+  const supabase = createAdminClient();
+  const { addOns } = await getPriceList(supabase);
+  const allowed = new Set(addOns.map((a) => a.value));
   const picked = Array.from(new Set(formData.getAll("addons").map(String).filter((v) => allowed.has(v))));
   const note = String(formData.get("addonsNote") ?? "").trim().slice(0, 2000) || null;
 
@@ -76,7 +83,6 @@ export async function requestAddons(formData: FormData) {
     redirect(`/client/${token}?error=${encodeURIComponent("Check at least one add-on you'd like pricing for.")}#addons`);
   }
 
-  const supabase = createAdminClient();
   const { data: event } = await supabase
     .from("events")
     .select("id, name, event_date")
@@ -106,7 +112,7 @@ export async function requestAddons(formData: FormData) {
   if (isEmailConfigured()) {
     try {
       const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://perfect-pours-platform.vercel.app";
-      const labels = picked.map((v) => ADD_ONS.find((a) => a.value === v)?.label ?? v);
+      const labels = picked.map((v) => addOns.find((a) => a.value === v)?.label ?? v);
       await sendEmail({
         to: process.env.ADMIN_NOTIFICATION_EMAIL || "faith@perfectpoursandmore.com",
         subject: `Add-on request: ${event.name}`,
@@ -122,6 +128,57 @@ ${note ? `<p><strong>Their note:</strong> ${esc(note)}</p>` : ""}
 
   revalidatePath(`/client/${token}`);
   redirect(`/client/${token}?addons=requested#addons`);
+}
+
+/**
+ * Public, token-only. When the proposal offers two options (package vs
+ * bartender only), the client picks one here. Locked once a contract is out.
+ */
+export async function chooseOption(formData: FormData) {
+  const token = String(formData.get("token") ?? "");
+  const option = String(formData.get("option") ?? "");
+  if (!token) redirect("/");
+
+  const supabase = createAdminClient();
+  const { data: event } = await supabase.from("events").select("id, name, event_date").eq("documents_token", token).single();
+  if (!event) redirect("/");
+
+  const [{ data: proposal }, { data: contract }] = await Promise.all([
+    supabase.from("proposals").select("id, status, chosen_option").eq("event_id", event.id).order("created_at", { ascending: false }).limit(1).single(),
+    supabase.from("contracts").select("status").eq("event_id", event.id).order("created_at", { ascending: false }).limit(1).maybeSingle(),
+  ]);
+  if (!proposal || proposal.status !== "sent") redirect(`/client/${token}`);
+  if (contract && contract.status !== "unsent") {
+    redirect(`/client/${token}?error=${encodeURIComponent("Your agreement is already out, so reach out to Faith to change your package.")}#options`);
+  }
+
+  const { data: items } = await supabase.from("proposal_items").select("*").eq("proposal_id", proposal!.id);
+  if (!proposalOptions(items ?? []).includes(option)) redirect(`/client/${token}#options`);
+  if (proposal!.chosen_option === option) redirect(`/client/${token}#options`);
+
+  await supabase
+    .from("proposals")
+    .update({ chosen_option: option, option_chosen_at: new Date().toISOString() })
+    .eq("id", proposal!.id);
+  await recomputeProposalTotals(supabase, proposal!.id);
+
+  if (isEmailConfigured()) {
+    try {
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://perfect-pours-platform.vercel.app";
+      const { data: updated } = await supabase.from("proposals").select("total_amount").eq("id", proposal!.id).single();
+      await sendEmail({
+        to: process.env.ADMIN_NOTIFICATION_EMAIL || "faith@perfectpoursandmore.com",
+        subject: `${event.name} chose: ${option}`,
+        html: `<p>${esc(event.name)} (${formatDate(event.event_date)}) picked <strong>${esc(option)}</strong>. New total: ${formatMoney(updated?.total_amount)}.</p>
+<p><a href="${appUrl}/admin/events/${event.id}/booking">Open the event</a></p>`,
+      });
+    } catch (err) {
+      console.error("chooseOption: notification failed:", err);
+    }
+  }
+
+  revalidatePath(`/client/${token}`);
+  redirect(`/client/${token}?chose=1#options`);
 }
 
 function esc(s: string): string {

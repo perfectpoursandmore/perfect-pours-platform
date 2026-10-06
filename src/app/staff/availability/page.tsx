@@ -67,7 +67,7 @@ export default async function StaffAvailabilityPage({
 
   return (
     <div style={{ display: "grid", gap: "1.5rem" }}>
-      {searchParams.error && <p style={{ color: "#a33", margin: 0 }}>{searchParams.error}</p>}
+      {searchParams.error && <p style={{ color: "var(--color-danger)", margin: 0 }}>{searchParams.error}</p>}
 
       <div>
         <h1 style={{ margin: 0 }}>Availability requests</h1>
@@ -192,7 +192,7 @@ export default async function StaffAvailabilityPage({
                 }}
               >
                 <span>{formatDate(day.date)} (whole day)</span>
-                <span style={{ color: day.status === "available" ? "#2a7a2a" : "var(--color-muted)" }}>
+                <span style={{ color: day.status === "available" ? "var(--color-text)" : "var(--color-muted)" }}>
                   {day.status === "available" ? "You said yes" : "You said no"}
                 </span>
               </div>
@@ -215,7 +215,7 @@ export default async function StaffAvailabilityPage({
                   <span>
                     {event.name} — {formatDate(event.event_date)}
                   </span>
-                  <span style={{ color: invite.status === "available" ? "#2a7a2a" : "var(--color-muted)" }}>
+                  <span style={{ color: invite.status === "available" ? "var(--color-text)" : "var(--color-muted)" }}>
                     {invite.status === "available" ? "You said yes" : "You said no"}
                   </span>
                 </div>

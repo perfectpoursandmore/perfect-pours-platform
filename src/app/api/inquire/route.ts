@@ -187,7 +187,7 @@ export async function POST(request: Request) {
 
       const conflictNote =
         sameDay && sameDay.length > 0
-          ? `<p style="color:#a33"><strong>Heads up:</strong> you already have ${sameDay
+          ? `<p style="color:#b42318"><strong>Heads up:</strong> you already have ${sameDay
               .map((e) => `${esc(e.name)} (${e.status === "inquiry" ? "hold" : "booked"})`)
               .join(", ")} on this date.</p>`
           : "";

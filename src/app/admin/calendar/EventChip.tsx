@@ -33,7 +33,7 @@ export function EventChip({ event }: { event: CalendarEvent }) {
         marginBottom: 2,
         textDecoration: cancelled ? "line-through" : "none",
         color: cancelled ? "var(--color-muted)" : "inherit",
-        background: cancelled ? "transparent" : hold ? "#fff" : "var(--color-highlight, #f1e9dd)",
+        background: cancelled ? "transparent" : hold ? "#fff" : "var(--color-soft)",
         border: hold ? "1px dashed var(--color-accent)" : "1px solid transparent",
         whiteSpace: "nowrap",
         overflow: "hidden",

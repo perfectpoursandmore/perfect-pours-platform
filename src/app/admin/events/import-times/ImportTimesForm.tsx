@@ -140,7 +140,7 @@ export function ImportTimesForm() {
           review everything below and click Import.
         </p>
         {isParsing && <p style={{ color: "var(--color-muted)", margin: 0 }}>Reading file…</p>}
-        {parseError && <p style={{ color: "#a33", margin: 0 }}>{parseError}</p>}
+        {parseError && <p style={{ color: "var(--color-danger)", margin: 0 }}>{parseError}</p>}
       </div>
 
       {rows && rows.length === 0 && !isParsing && (
@@ -170,7 +170,7 @@ export function ImportTimesForm() {
                     key={`${r.sheetName}-${r.rowNumber}`}
                     style={{
                       borderBottom: "1px solid var(--color-border)",
-                      background: r.selectedEventId ? undefined : "#fdf1f1",
+                      background: r.selectedEventId ? undefined : "var(--color-soft)",
                     }}
                   >
                     <td style={{ padding: "0.6rem" }}>
@@ -189,7 +189,7 @@ export function ImportTimesForm() {
                         {r.sheetName} row {r.rowNumber}
                       </div>
                       {r.timeNeedsReview && (
-                        <div style={{ color: "#a33" }}>A time on this row was ambiguous — check it.</div>
+                        <div style={{ color: "var(--color-danger)" }}>A time on this row was ambiguous — check it.</div>
                       )}
                     </td>
                     <td style={{ padding: "0.6rem" }}>
@@ -296,7 +296,7 @@ export function ImportTimesForm() {
               {isCommitting ? "Importing…" : `Import ${matchedCount} selected row${matchedCount === 1 ? "" : "s"}`}
             </button>
             {result && (
-              <span style={{ color: result.time.errors.length || result.staff.errors.length ? "#a33" : "#2a7a2a" }}>
+              <span style={{ color: result.time.errors.length || result.staff.errors.length ? "var(--color-danger)" : "var(--color-text)" }}>
                 {result.time.updated} event{result.time.updated === 1 ? "" : "s"} updated with times.{" "}
                 {result.staff.assigned} staff assignment{result.staff.assigned === 1 ? "" : "s"} added,{" "}
                 {result.staff.openAdded} open position{result.staff.openAdded === 1 ? "" : "s"} added
@@ -307,7 +307,7 @@ export function ImportTimesForm() {
           </div>
 
           {result && (result.time.errors.length > 0 || result.staff.errors.length > 0) && (
-            <ul style={{ color: "#a33" }}>
+            <ul style={{ color: "var(--color-danger)" }}>
               {result.time.errors.map((e, i) => (
                 <li key={`t${i}`}>{e}</li>
               ))}

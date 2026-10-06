@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { EventTabs } from "./EventTabs";
 
 export default async function EventLayout({
   children,
@@ -23,7 +24,7 @@ export default async function EventLayout({
   return (
     <div style={{ display: "grid", gap: "1.5rem", maxWidth: 720 }}>
       <div>
-        <a href="/admin/events" style={{ fontSize: "0.9rem" }}>
+        <a href="/admin/events" className="muted small" style={{ textDecoration: "none" }}>
           ← All events
         </a>
         <h1 style={{ margin: "0.5rem 0 0" }}>{event.name}</h1>
@@ -36,20 +37,7 @@ export default async function EventLayout({
         )}
       </div>
 
-      <nav style={{ display: "flex", gap: "1.25rem", borderBottom: "1px solid var(--color-border)" }}>
-        <a href={base} style={{ padding: "0.5rem 0" }}>
-          Overview
-        </a>
-        <a href={`${base}/notes`} style={{ padding: "0.5rem 0" }}>
-          Notes
-        </a>
-        <a href={`${base}/staff`} style={{ padding: "0.5rem 0" }}>
-          Staff
-        </a>
-        <a href={`${base}/booking`} style={{ padding: "0.5rem 0" }}>
-          Booking
-        </a>
-      </nav>
+      <EventTabs base={base} />
 
       {children}
     </div>

@@ -147,7 +147,7 @@ function ViewTab({ href, active, label }: { href: string; active: boolean; label
         padding: "0.5rem 0.9rem",
         borderRadius: 8,
         border: "1px solid var(--color-border)",
-        background: active ? "var(--color-accent, #7a5c3e)" : "none",
+        background: active ? "var(--color-accent)" : "none",
         color: active ? "#fff" : "inherit",
         textDecoration: "none",
         fontSize: "0.9rem",

@@ -53,10 +53,7 @@ export async function updateEventOverview(formData: FormData) {
       guest_arrival_time: guestArrivalTime,
       staff_end_time: staffEndTime,
       staff_instructions: nullIfEmpty(formData.get("staffInstructions")),
-      service_style: cleanValue(SERVICE_STYLES, formData.get("serviceStyle")),
-      dishware: cleanValue(DISHWARE, formData.get("dishware")),
-      services_interested: cleanValues(SERVICES, formData.getAll("services")),
-      extra_help: cleanValues(EXTRA_HELP, formData.getAll("extraHelp")),
+      // Services / food style / dishware / extra help live on the Booking tab now.
     })
     .eq("id", id);
 

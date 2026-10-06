@@ -21,3 +21,32 @@ export function computeProposalTotals(params: {
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
+
+// ---------------------------------------------------------------------
+// Options (e.g. "Perfect Pours Package" vs "Bartender only"). Lines with no
+// option_label are always included; the rest count only for the chosen one.
+// ---------------------------------------------------------------------
+
+type OptionLine = { option_label?: string | null; line_total: number | string; sort_order?: number | null };
+
+/** The distinct options on a proposal, in the order they first appear. */
+export function proposalOptions(items: OptionLine[]): string[] {
+  const seen: string[] = [];
+  for (const i of items) if (i.option_label && !seen.includes(i.option_label)) seen.push(i.option_label);
+  return seen;
+}
+
+/**
+ * Which option the totals should use: the chosen one if it still exists,
+ * otherwise the first option (so stored totals are never blank).
+ */
+export function effectiveOption(items: OptionLine[], chosen: string | null | undefined): string | null {
+  const options = proposalOptions(items);
+  if (options.length === 0) return null;
+  return chosen && options.includes(chosen) ? chosen : options[0];
+}
+
+/** The lines that count when `option` is the one picked. */
+export function linesForOption<T extends OptionLine>(items: T[], option: string | null): T[] {
+  return items.filter((i) => !i.option_label || i.option_label === option);
+}

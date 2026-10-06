@@ -28,7 +28,7 @@ export default function LoginPage({
         </div>
 
         {searchParams.error && (
-          <p style={{ color: "#a33", fontSize: "0.85rem", margin: 0 }}>{searchParams.error}</p>
+          <p style={{ color: "var(--color-danger)", fontSize: "0.85rem", margin: 0 }}>{searchParams.error}</p>
         )}
 
         <input type="hidden" name="next" value={searchParams.next ?? ""} />

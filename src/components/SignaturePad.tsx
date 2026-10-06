@@ -33,7 +33,7 @@ export function SignaturePad({ name = "signatureData" }: { name?: string }) {
     const { x, y } = getPos(e);
     ctx.lineWidth = 2;
     ctx.lineCap = "round";
-    ctx.strokeStyle = "#1f1b16";
+    ctx.strokeStyle = "#111111";
     ctx.lineTo(x, y);
     ctx.stroke();
     setHasDrawn(true);

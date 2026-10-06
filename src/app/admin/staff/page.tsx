@@ -26,7 +26,7 @@ export default async function StaffDirectoryPage({
         </p>
       </div>
 
-      {searchParams.error && <p style={{ color: "#a33" }}>{searchParams.error}</p>}
+      {searchParams.error && <p style={{ color: "var(--color-danger)" }}>{searchParams.error}</p>}
 
       <form action={addStaffMember} className="card" style={{ display: "grid", gap: "1rem" }}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
@@ -93,7 +93,7 @@ export default async function StaffDirectoryPage({
                     <td style={{ padding: "0.75rem 1rem" }}>{s.active ? "Active" : "Inactive"}</td>
                     <td style={{ padding: "0.75rem 1rem" }}>
                       {s.user_id ? (
-                        <span style={{ color: "#2a7a2a" }}>✓ Can log in</span>
+                        <span style={{ color: "var(--color-text)" }}>✓ Can log in</span>
                       ) : email ? (
                         <form action={inviteStaffLogin}>
                           <input type="hidden" name="staffId" value={s.id} />

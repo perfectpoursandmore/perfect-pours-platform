@@ -29,14 +29,14 @@ export default async function CalendarSettingsPage({
       </div>
 
       {searchParams.connected && (
-        <p style={{ color: "#2a7a2a" }}>Google Calendar connected successfully.</p>
+        <p style={{ color: "var(--color-text)" }}>Google Calendar connected successfully.</p>
       )}
       {searchParams.synced && (
-        <p style={{ color: "#2a7a2a" }}>
+        <p style={{ color: "var(--color-text)" }}>
           Synced {searchParams.synced} upcoming event(s) to Google Calendar.
         </p>
       )}
-      {searchParams.error && <p style={{ color: "#a33" }}>{searchParams.error}</p>}
+      {searchParams.error && <p style={{ color: "var(--color-danger)" }}>{searchParams.error}</p>}
 
       <div className="card">
         {isConnected ? (

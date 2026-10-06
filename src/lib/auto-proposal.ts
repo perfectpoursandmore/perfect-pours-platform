@@ -1,14 +1,10 @@
 import { labelsFor, SERVICES } from "@/lib/event-details";
 import {
-  BARTENDER_ONLY,
-  GRATUITY_RATE,
-  MIN_HOURS,
-  PACKAGE,
-  PACKAGE_HOURS,
-  RATES,
-  SERVER,
+  type PriceList,
   bartendersNeeded,
   customQuoteReason,
+  gratuityLabel,
+  packageIncludes,
   tierBelow,
   tierFor,
 } from "@/lib/price-list";
@@ -34,6 +30,9 @@ export type DraftLine = {
   unit_price: number;
   line_total: number;
   note: string | null; // shown to the client under the line
+  /** null = always included. Otherwise the name of the option this line belongs to
+   *  (e.g. package vs bartender only); the client picks one option. */
+  option: string | null;
 };
 
 export type DraftResult = {
@@ -52,17 +51,30 @@ function scheduledHours(e: EventForPricing): number | null {
   return Math.round((ms / 3600000) * 2) / 2; // nearest half hour
 }
 
-function line(description: string, quantity: number, unitPrice: number, note: string | null = null): DraftLine {
-  return { description, quantity, unit_price: unitPrice, line_total: round2(quantity * unitPrice), note };
+function line(
+  description: string,
+  quantity: number,
+  unitPrice: number,
+  note: string | null = null,
+  option: string | null = null
+): DraftLine {
+  return { description, quantity, unit_price: unitPrice, line_total: round2(quantity * unitPrice), note, option };
 }
 
-export function buildDraftProposal(e: EventForPricing): DraftResult {
+export const BARTENDER_ONLY_OPTION = "Bartender only";
+
+export function buildDraftProposal(e: EventForPricing, pl: PriceList): DraftResult {
+  const RATES = pl.rates;
+  const MIN_HOURS = pl.minHours;
+  const PACKAGE_HOURS = pl.packageHours;
+  const BARTENDER_ONLY = pl.bartenderOnly;
+  const SERVER = pl.server;
   const services = e.services_interested ?? [];
   const guests = e.guest_count ?? 0;
   const headsUps: string[] = [];
   const lines: DraftLine[] = [];
 
-  const customQuote = customQuoteReason(e.event_type, e.guest_count);
+  const customQuote = customQuoteReason(pl, e.event_type, e.guest_count);
   if (customQuote) {
     return {
       lines: [],
@@ -76,24 +88,36 @@ export function buildDraftProposal(e: EventForPricing): DraftResult {
   const hours = scheduledHours(e);
   const hourlyHours = Math.max(MIN_HOURS, hours ?? MIN_HOURS);
 
-  let gratuityBase = 0;
   const wantsPackage = services.includes("signature_cocktails");
   const wantsBartender = services.includes("bartender");
+  // Checked both? Offer both, side by side, and let the client choose.
+  const offerBoth = wantsPackage && wantsBartender && guests > 0 && tierFor(pl, guests) !== null;
+  const PKG = offerBoth ? pl.package.name : null;
+  const BAR = offerBoth ? BARTENDER_ONLY_OPTION : null;
+  // Gratuity owed on hourly staff, kept per option so each option's total is right.
+  const gratuity = new Map<string | null, number>();
+  const addGratuity = (option: string | null, amount: number) => gratuity.set(option, (gratuity.get(option) ?? 0) + amount);
+  if (offerBoth) {
+    headsUps.push("They checked both the package and bartender only, so the proposal offers both. The client picks one on their pricing page.");
+  }
 
   if (wantsPackage && guests) {
-    const tier = tierFor(guests);
+    const tier = tierFor(pl, guests);
     if (tier) {
-      const lower = tierBelow(tier);
+      const lower = tierBelow(pl, tier);
       lines.push(
         line(
-          [`${PACKAGE.name}: up to ${tier.upTo} guests`, ...PACKAGE.includes(tier.bartenders).map((i) => `• ${i}`)].join("\n"),
+          [`${pl.package.name}: up to ${tier.upTo} guests`, ...packageIncludes(pl, tier.bartenders).map((i) => `• ${i}`)].join("\n"),
           1,
           tier.price,
-          lower ? `If your final count is ${lower.upTo} or fewer, this package is ${money(lower.price)}.` : null
+          lower ? `If your final count is ${lower.upTo} or fewer, this package is ${money(lower.price)}.` : null,
+          PKG
         )
       );
-      if (guests > 50 && guests <= 60) {
-        headsUps.push("51–60 guests is priced with 1 bartender. Switch to 2 if it's a night event or a heavy-drinking crowd.");
+      // Top 1-bartender tier, right before the tiers switch to 2: worth a second look.
+      const next = pl.package.tiers[pl.package.tiers.indexOf(tier) + 1];
+      if (lower && tier.bartenders === 1 && next && next.bartenders > 1) {
+        headsUps.push(`${lower.upTo + 1}–${tier.upTo} guests is priced with 1 bartender. Switch to 2 if it's a night event or a heavy-drinking crowd.`);
       }
       const extra = hours !== null ? hours - PACKAGE_HOURS : 0;
       if (extra > 0) {
@@ -101,23 +125,27 @@ export function buildDraftProposal(e: EventForPricing): DraftResult {
           line(
             `Extra bar time: ${extra} hr × ${tier.bartenders} bartender${tier.bartenders > 1 ? "s" : ""} at ${money(RATES.bartender)}/hr`,
             extra * tier.bartenders,
-            RATES.bartender
+            RATES.bartender,
+            null,
+            PKG
           )
         );
-        gratuityBase += extra * tier.bartenders * RATES.bartender;
+        addGratuity(PKG, extra * tier.bartenders * RATES.bartender);
       }
     }
-  } else if (wantsBartender) {
-    const count = guests ? bartendersNeeded(guests) : 1;
+  }
+  if (wantsBartender && (!(wantsPackage && guests) || offerBoth)) {
+    const count = guests ? bartendersNeeded(pl, guests) : 1;
     lines.push(
       line(
         `${BARTENDER_ONLY.name}${count > 1 ? `s × ${count}` : ""}: ${hourlyHours} hrs at ${money(RATES.bartender)}/hr\n${BARTENDER_ONLY.description}`,
         hourlyHours * count,
         RATES.bartender,
-        BARTENDER_ONLY.note
+        offerBoth ? null : BARTENDER_ONLY.note, // the note pitches the package, which is right next to it
+        BAR
       )
     );
-    gratuityBase += hourlyHours * count * RATES.bartender;
+    addGratuity(BAR, hourlyHours * count * RATES.bartender);
     if (count > 1) headsUps.push(`Priced with ${count} bartenders because of the guest count. Adjust if needed.`);
   }
 
@@ -137,19 +165,30 @@ export function buildDraftProposal(e: EventForPricing): DraftResult {
         reasons.length > 0 ? SERVER.note : null // only mention extra staff when it's likely
       )
     );
-    gratuityBase += hourlyHours * RATES.server;
+    addGratuity(null, hourlyHours * RATES.server);
     if (reasons.length > 0) {
       headsUps.push(`Might need a 2nd server (${reasons.join(", ")}). Priced with 1 for now. Add another if needed.`);
     }
   }
 
-  const hasHourlyStaff = (!wantsPackage && wantsBartender) || services.includes("server");
+  const hasHourlyStaff = (!wantsPackage && wantsBartender) || offerBoth || services.includes("server");
   if (hasHourlyStaff && hours === null) {
     headsUps.push(`No staff arrival/end times yet, so hourly staff are priced at the ${MIN_HOURS}-hour minimum.`);
   }
 
-  if (gratuityBase > 0) {
-    lines.push(line(`Gratuity (20%) on hourly staff`, 1, round2(gratuityBase * GRATUITY_RATE)));
+  const g = gratuityLabel(pl);
+  if (!offerBoth) {
+    const base = Array.from(gratuity.values()).reduce((a, b) => a + b, 0);
+    if (base > 0) lines.push(line(`Gratuity (${g}) on hourly staff`, 1, round2(base * pl.gratuityRate)));
+  } else {
+    const labels = new Map<string | null, string>([
+      [PKG, `Gratuity (${g}) on extra bar time`],
+      [BAR, `Gratuity (${g}) on bartender`],
+      [null, `Gratuity (${g}) on server`],
+    ]);
+    for (const [option, base] of Array.from(gratuity.entries())) {
+      if (base > 0) lines.push(line(labels.get(option)!, 1, round2(base * pl.gratuityRate), null, option));
+    }
   }
 
   const unpriced = services.filter((s) => !["signature_cocktails", "bartender", "server"].includes(s));
