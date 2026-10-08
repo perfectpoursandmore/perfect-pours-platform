@@ -162,6 +162,27 @@ export default async function ClientDetailPage({
           <input id="phone" name="phone" defaultValue={client.phone ?? ""} />
         </div>
         <div>
+          <label htmlFor="addressLine">Home address</label>
+          <input id="addressLine" name="addressLine" defaultValue={client.address_line ?? ""} placeholder="Street address" />
+          <p style={{ margin: "0.3rem 0 0", fontSize: "0.8rem", color: "var(--color-muted)" }}>
+            New events for {client.first_name} start with this address, and it goes on their QuickBooks invoices.
+          </p>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: "1rem" }}>
+          <div>
+            <label htmlFor="city">City</label>
+            <input id="city" name="city" defaultValue={client.city ?? ""} />
+          </div>
+          <div>
+            <label htmlFor="state">State</label>
+            <input id="state" name="state" defaultValue={client.state ?? ""} />
+          </div>
+          <div>
+            <label htmlFor="zip">ZIP</label>
+            <input id="zip" name="zip" defaultValue={client.zip ?? ""} />
+          </div>
+        </div>
+        <div>
           <label htmlFor="preferredContactMethod">Preferred contact method</label>
           <select
             id="preferredContactMethod"

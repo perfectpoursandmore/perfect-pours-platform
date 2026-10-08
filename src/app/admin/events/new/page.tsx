@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { EVENT_STATUS_LABELS } from "@/lib/labels";
 import { createEventDirect } from "../actions";
+import { EventAddressFields } from "./EventAddressFields";
 
 export default async function NewEventPage({
   searchParams,
@@ -10,7 +11,7 @@ export default async function NewEventPage({
   const supabase = createClient();
   const { data: allClients } = await supabase
     .from("clients")
-    .select("id, first_name, last_name, email")
+    .select("*")
     .order("first_name");
 
   return (
@@ -125,30 +126,14 @@ export default async function NewEventPage({
           </div>
         </div>
 
-        <div>
-          <label htmlFor="venueName">Venue name</label>
-          <input id="venueName" name="venueName" />
-        </div>
-
-        <div>
-          <label htmlFor="addressLine">Address</label>
-          <input id="addressLine" name="addressLine" />
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "1rem" }}>
-          <div>
-            <label htmlFor="city">City</label>
-            <input id="city" name="city" />
-          </div>
-          <div>
-            <label htmlFor="state">State</label>
-            <input id="state" name="state" />
-          </div>
-          <div>
-            <label htmlFor="zip">ZIP</label>
-            <input id="zip" name="zip" />
-          </div>
-        </div>
+        <EventAddressFields
+          initialClientId={searchParams.clientId ?? ""}
+          homes={Object.fromEntries(
+            (allClients ?? [])
+              .filter((c) => c.address_line)
+              .map((c) => [c.id, { address_line: c.address_line, city: c.city, state: c.state, zip: c.zip }])
+          )}
+        />
 
         <button type="submit" className="button" style={{ justifySelf: "start" }}>
           Create event

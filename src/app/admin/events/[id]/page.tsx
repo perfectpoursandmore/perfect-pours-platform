@@ -7,7 +7,9 @@ import {
   createClientAndAssignToEvent,
   deleteEvent,
   notifyStaffOfEventTime,
+  useClientHomeAddress,
 } from "../actions";
+import { getClientAddress } from "@/lib/client-address";
 import { DeleteEventButton } from "../DeleteEventButton";
 
 export default async function EventOverviewPage({
@@ -21,6 +23,8 @@ export default async function EventOverviewPage({
   const { data: event } = await supabase.from("events").select("*").eq("id", params.id).single();
 
   if (!event) return null;
+
+  const home = event.address_line ? null : await getClientAddress(supabase, event.client_id);
 
   const { data: allClients } = await supabase
     .from("clients")
@@ -121,6 +125,19 @@ export default async function EventOverviewPage({
           </form>
         </details>
       </div>
+
+      {home && (
+        <form action={useClientHomeAddress} className="notice" style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
+          <input type="hidden" name="eventId" value={event.id} />
+          <span>
+            No address on this event yet. Their home address is {home.address_line}
+            {home.city ? `, ${home.city}` : ""}.
+          </span>
+          <button type="submit" className="button-secondary">
+            Use home address
+          </button>
+        </form>
+      )}
 
       <form action={updateEventOverview} className="card" style={{ display: "grid", gap: "1rem" }}>
         <input type="hidden" name="id" value={event.id} />

@@ -27,6 +27,14 @@ export async function updateClientInfo(formData: FormData) {
     })
     .eq("id", id);
 
+  // Home address in its own update, so the rest still saves before the
+  // 0023 migration has been run.
+  const addr = (k: string) => String(formData.get(k) ?? "").trim() || null;
+  await supabase
+    .from("clients")
+    .update({ address_line: addr("addressLine"), city: addr("city"), state: addr("state"), zip: addr("zip") })
+    .eq("id", id);
+
   revalidatePath(`/admin/clients/${id}`);
 }
 

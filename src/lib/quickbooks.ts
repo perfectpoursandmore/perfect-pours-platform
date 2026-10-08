@@ -229,9 +229,25 @@ function qboQueryEscape(value: string): string {
  * in her QuickBooks company from before this app existed), or creates one.
  * Always returns the QuickBooks Customer Id.
  */
+export type QboAddress = { line1: string | null; city: string | null; state: string | null; zip: string | null };
+
+function qboAddr(a: QboAddress | null | undefined) {
+  if (!a?.line1) return null;
+  return {
+    Line1: a.line1,
+    ...(a.city ? { City: a.city } : {}),
+    ...(a.state ? { CountrySubDivisionCode: a.state } : {}),
+    ...(a.zip ? { PostalCode: a.zip } : {}),
+  };
+}
+
+/**
+ * Finds the client in QuickBooks (by email) or creates them, with their
+ * name, email, phone and billing address -- so nothing gets retyped there.
+ */
 export async function findOrCreateCustomer(
   conn: QboConnection,
-  client: { firstName: string; lastName: string; email: string | null; phone: string | null }
+  client: { firstName: string; lastName: string; email: string | null; phone: string | null; address?: QboAddress | null }
 ): Promise<string> {
   const displayName = `${client.firstName} ${client.lastName}`.trim();
 
@@ -240,9 +256,15 @@ export async function findOrCreateCustomer(
     const result = await qboFetch(conn, `/query?query=${encodeURIComponent(query)}`);
     const existing = (result.QueryResponse as { Customer?: Array<{ Id: string }> } | undefined)
       ?.Customer?.[0];
-    if (existing) return existing.Id;
+    if (existing) {
+      await fillInCustomerDetails(conn, existing.Id, client).catch((err) =>
+        console.error("Couldn't fill in QuickBooks customer details:", err)
+      );
+      return existing.Id;
+    }
   }
 
+  const billAddr = qboAddr(client.address);
   const created = await qboFetch(conn, "/customer", {
     method: "POST",
     body: JSON.stringify({
@@ -251,11 +273,42 @@ export async function findOrCreateCustomer(
       FamilyName: client.lastName,
       ...(client.email ? { PrimaryEmailAddr: { Address: client.email } } : {}),
       ...(client.phone ? { PrimaryPhone: { FreeFormNumber: client.phone } } : {}),
+      ...(billAddr ? { BillAddr: billAddr } : {}),
     }),
   });
 
   const customer = created.Customer as { Id: string };
   return customer.Id;
+}
+
+/**
+ * For a customer already in QuickBooks: adds the email, phone and billing
+ * address from the app wherever QuickBooks has none. Never overwrites
+ * anything already filled in there.
+ */
+export async function fillInCustomerDetails(
+  conn: QboConnection,
+  customerId: string,
+  client: { email: string | null; phone: string | null; address?: QboAddress | null }
+): Promise<void> {
+  const read = await qboFetch(conn, `/customer/${customerId}`);
+  const current = read.Customer as {
+    SyncToken: string;
+    PrimaryEmailAddr?: { Address?: string };
+    PrimaryPhone?: { FreeFormNumber?: string };
+    BillAddr?: { Line1?: string };
+  };
+  const billAddr = qboAddr(client.address);
+  const patch = {
+    ...(client.email && !current.PrimaryEmailAddr?.Address ? { PrimaryEmailAddr: { Address: client.email } } : {}),
+    ...(client.phone && !current.PrimaryPhone?.FreeFormNumber ? { PrimaryPhone: { FreeFormNumber: client.phone } } : {}),
+    ...(billAddr && !current.BillAddr?.Line1 ? { BillAddr: billAddr } : {}),
+  };
+  if (Object.keys(patch).length === 0) return;
+  await qboFetch(conn, "/customer", {
+    method: "POST",
+    body: JSON.stringify({ Id: customerId, SyncToken: current.SyncToken, sparse: true, ...patch }),
+  });
 }
 
 /**
@@ -271,12 +324,25 @@ export async function findOrCreateCustomer(
  */
 export async function createInvoice(
   conn: QboConnection,
-  params: { customerId: string; description: string; amount: number; memo?: string }
+  params: {
+    customerId: string;
+    description: string;
+    amount: number;
+    memo?: string;
+    billEmail?: string | null; // so "Send" in QuickBooks already has their email
+    billAddress?: QboAddress | null; // the client's address
+    eventAddress?: QboAddress | null; // where the event is, as the invoice's shipping/service address
+  }
 ): Promise<{ id: string }> {
+  const billAddr = qboAddr(params.billAddress);
+  const shipAddr = qboAddr(params.eventAddress);
   const created = await qboFetch(conn, "/invoice", {
     method: "POST",
     body: JSON.stringify({
       CustomerRef: { value: params.customerId },
+      ...(params.billEmail ? { BillEmail: { Address: params.billEmail } } : {}),
+      ...(billAddr ? { BillAddr: billAddr } : {}),
+      ...(shipAddr ? { ShipAddr: shipAddr } : {}),
       ...(params.memo ? { CustomerMemo: { value: params.memo } } : {}),
       Line: [
         {

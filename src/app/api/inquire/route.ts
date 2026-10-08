@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { rememberClientAddress } from "@/lib/client-address";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isEmailConfigured, sendEmail } from "@/lib/email";
 import { EVENT_TYPE_LABELS, formatDate } from "@/lib/labels";
@@ -146,6 +147,10 @@ export async function POST(request: Request) {
     console.error("Inquiry: couldn't create event:", eventError);
     return NextResponse.json({ error: "Something went wrong. Please try again." }, { status: 500 });
   }
+
+  // First time we see where they host (and it's not a named venue)? Save it
+  // as their home address so future events and invoices start with it.
+  await rememberClientAddress(supabase, clientId, { venue_name: venueName, address_line: addressLine, city, state, zip });
 
   // 3. Lead, already linked to the client and event.
   const { error: leadError } = await supabase.from("leads").insert({

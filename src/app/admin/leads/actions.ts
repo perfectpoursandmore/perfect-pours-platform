@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { rememberClientAddress } from "@/lib/client-address";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/roles";
@@ -99,6 +100,12 @@ export async function convertLeadToClientAndEvent(formData: FormData) {
   }
 
   await supabase.from("leads").update({ client_id: clientId, event_id: eventId }).eq("id", id);
+  await rememberClientAddress(supabase, clientId, {
+    address_line: lead.address_line ?? lead.venue_or_address,
+    city: lead.city,
+    state: lead.state,
+    zip: lead.zip,
+  });
   await syncEventToGoogle(eventId!);
 
   revalidatePath(`/admin/leads/${id}`);

@@ -40,7 +40,7 @@ export default async function EventBookingPage({
   searchParams,
 }: {
   params: { id: string };
-  searchParams: { error?: string; pricingSent?: string; statusSaved?: string; detailsSaved?: string };
+  searchParams: { error?: string; pricingSent?: string; statusSaved?: string; detailsSaved?: string; invoiceCreated?: string };
 }) {
   const supabase = createClient();
   const eventId = params.id;
@@ -61,7 +61,7 @@ export default async function EventBookingPage({
     supabase.from("catalog_items").select("id, name, description, default_price, pricing_type").eq("active", true).order("name"),
     supabase.from("contract_templates").select("id, name").eq("active", true).order("created_at"),
     supabase.from("event_financials").select("*").eq("event_id", eventId).single(),
-    supabase.from("qbo_connections").select("connected_at, realm_id").eq("id", true).single(),
+    supabase.from("qbo_connections").select("connected_at, realm_id, environment").eq("id", true).single(),
     supabase.from("email_templates").select("id, name").eq("active", true).order("created_at"),
     supabase.from("events").select("*").eq("id", eventId).single(),
     supabase.from("leads").select("message, consultation_at").eq("event_id", eventId).order("created_at", { ascending: false }).limit(1).maybeSingle(),
@@ -76,6 +76,9 @@ export default async function EventBookingPage({
   }
 
   const qboConnected = Boolean(qboConnection?.connected_at && qboConnection?.realm_id);
+  // Straight to the invoice inside QuickBooks, to review and send it there.
+  const qboInvoiceUrl = (id: string) =>
+    `https://app.${qboConnection?.environment === "production" ? "" : "sandbox."}qbo.intuit.com/app/invoice?txnId=${id}`;
   const { data: itemRows } = proposal
     ? await supabase.from("proposal_items").select("*").eq("proposal_id", proposal.id).order("sort_order")
     : { data: [] };
@@ -531,6 +534,12 @@ export default async function EventBookingPage({
       <section className="card" style={{ display: "grid", gap: "1rem" }}>
         <h2 style={h2}>Contract &amp; invoice</h2>
         {financials?.qbo_sync_error && <p style={{ margin: 0, color: "var(--color-danger)" }}>QuickBooks: {financials.qbo_sync_error}</p>}
+        {qboConnected && qboConnection?.environment !== "production" && (
+          <p className="notice" style={{ margin: 0, border: "1px solid var(--color-danger)" }}>
+            QuickBooks is connected in <strong>test mode</strong>, so invoices go to a practice company, not your real
+            QuickBooks. See <a href="/admin/settings/quickbooks">Settings → QuickBooks</a>.
+          </p>
+        )}
 
         {contract?.status !== "signed" && (
           <form action={generateContract} style={{ display: "flex", gap: "0.6rem", alignItems: "end", flexWrap: "wrap" }}>
@@ -608,10 +617,14 @@ export default async function EventBookingPage({
           ) : financials?.balance_paid ? (
             <p className="small" style={{ margin: 0 }}>✓ Paid in full.</p>
           ) : financials?.invoice_id ? (
-            <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
+            <div id="invoice" style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
+              {searchParams.invoiceCreated && <strong className="small">✓ Invoice created as a draft in QuickBooks.</strong>}
               <span className="muted small">
-                Invoice is in QuickBooks.{financials.deposit_paid ? " Retainer received, balance outstanding." : " Send it from QuickBooks when you're ready."}
+                {financials.deposit_paid ? "Retainer received, balance outstanding." : "Review it and send it from QuickBooks."}
               </span>
+              <a href={qboInvoiceUrl(financials.invoice_id)} target="_blank" rel="noreferrer" className="button">
+                Open in QuickBooks
+              </a>
               <form action={refreshInvoiceStatus}>
                 <input type="hidden" name="eventId" value={eventId} />
                 <button type="submit" className="button-secondary">
@@ -620,11 +633,17 @@ export default async function EventBookingPage({
               </form>
             </div>
           ) : (
-            <form action={createInvoiceDraft}>
+            <form action={createInvoiceDraft} id="invoice" style={{ display: "grid", gap: "0.4rem" }}>
               <input type="hidden" name="eventId" value={eventId} />
-              <button type="submit" className="button-secondary">
-                Create invoice in QuickBooks
-              </button>
+              <div>
+                <button type="submit" className="button-secondary">
+                  Create invoice in QuickBooks
+                </button>
+              </div>
+              <span className="muted small">
+                Uses {Number(proposal?.total_amount ?? 0) > 0 ? `the Quote total (${formatMoney(proposal?.total_amount)})` : financials?.total_amount ? `the event total from Edit status (${formatMoney(financials.total_amount)})` : "the Quote total, or the event total under Edit status. Neither is filled in yet"}
+                . It&apos;s saved as a draft for you to review and send in QuickBooks.
+              </span>
             </form>
           )}
           <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap" }}>

@@ -12,6 +12,8 @@ import { upsertEventFinancials, maybeMarkEventBooked } from "@/lib/event-financi
 import {
   getValidConnection,
   findOrCreateCustomer,
+  fillInCustomerDetails,
+  type QboAddress,
   createInvoice,
   getInvoiceStatus,
 } from "@/lib/quickbooks";
@@ -338,7 +340,7 @@ async function loadEventAndClientForInvoicing(
 ) {
   const { data: event } = await supabase
     .from("events")
-    .select("id, name, client_id, clients(id, first_name, last_name, email, phone, qbo_customer_id)")
+    .select("*, clients(*)")
     .eq("id", eventId)
     .single();
 
@@ -372,31 +374,52 @@ async function createDraftInvoiceForEvent(
   supabase: ReturnType<typeof createClient>,
   eventId: string,
   conn: NonNullable<Awaited<ReturnType<typeof getValidConnection>>>
-) {
+): Promise<string | null> {
   const loaded = await loadEventAndClientForInvoicing(supabase, eventId);
-  const { data: proposal } = await supabase
-    .from("proposals")
-    .select("total_amount, deposit_amount")
-    .eq("event_id", eventId)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .single();
+  const [{ data: proposal }, { data: financials }] = await Promise.all([
+    supabase.from("proposals").select("total_amount, deposit_amount").eq("event_id", eventId).order("created_at", { ascending: false }).limit(1).maybeSingle(),
+    supabase.from("event_financials").select("total_amount, deposit_amount").eq("event_id", eventId).maybeSingle(),
+  ]);
 
-  if (!loaded?.client || !proposal) return;
+  if (!loaded?.client) return "This event has no client attached. Pick one on the Overview tab first.";
+
+  // The amount comes from the Quote. If she priced it over email instead,
+  // the total she typed under "Edit status" works too.
+  const quoteTotal = Number(proposal?.total_amount ?? 0);
+  const amount = quoteTotal > 0 ? quoteTotal : Number(financials?.total_amount ?? 0);
+  const depositAmount = Number(proposal?.deposit_amount ?? 0) > 0 ? Number(proposal?.deposit_amount) : Number(financials?.deposit_amount ?? 0);
+  if (!(amount > 0)) {
+    return "There's no amount to invoice yet. Enter the event total (and retainer) under Edit status at the top, or build the Quote, then try again.";
+  }
 
   try {
-    let qboCustomerId = loaded.client.qbo_customer_id as string | null;
+    // Everything the app already knows goes to QuickBooks, so nothing is
+    // retyped there: billing = their home address (or the event's, if no
+    // home address is saved); the event location goes on as the service address.
+    const c = loaded.client;
+    const e = loaded.event;
+    const eventAddress: QboAddress | null = e.address_line ? { line1: e.address_line, city: e.city, state: e.state, zip: e.zip } : null;
+    const homeAddress: QboAddress | null = c.address_line ? { line1: c.address_line, city: c.city, state: c.state, zip: c.zip } : null;
+    const billAddress = homeAddress ?? eventAddress;
+
+    let qboCustomerId = c.qbo_customer_id as string | null;
     if (!qboCustomerId) {
       qboCustomerId = await findOrCreateCustomer(conn, {
-        firstName: loaded.client.first_name,
-        lastName: loaded.client.last_name,
-        email: loaded.client.email,
-        phone: loaded.client.phone,
+        firstName: c.first_name,
+        lastName: c.last_name ?? "",
+        email: c.email,
+        phone: c.phone,
+        address: billAddress,
       });
-      await supabase.from("clients").update({ qbo_customer_id: qboCustomerId }).eq("id", loaded.client.id);
+      await supabase.from("clients").update({ qbo_customer_id: qboCustomerId }).eq("id", c.id);
+    } else {
+      try {
+        await fillInCustomerDetails(conn, qboCustomerId, { email: c.email, phone: c.phone, address: billAddress });
+      } catch (err) {
+        console.error("Couldn't fill in QuickBooks customer details:", err); // the invoice still goes ahead
+      }
     }
 
-    const depositAmount = Number(proposal.deposit_amount);
     const memo =
       depositAmount > 0
         ? `A retainer of ${formatMoney(depositAmount)} is due now to confirm this booking, with the remaining balance due before the event. Enter the amount you'd like to pay now at checkout.`
@@ -404,9 +427,12 @@ async function createDraftInvoiceForEvent(
 
     const invoice = await createInvoice(conn, {
       customerId: qboCustomerId,
-      description: `Invoice — ${loaded.event.name}`,
-      amount: Number(proposal.total_amount),
+      description: `${loaded.event.name}${loaded.event.event_date ? ` (${formatDate(loaded.event.event_date)})` : ""}`,
+      amount,
       memo,
+      billEmail: c.email,
+      billAddress,
+      eventAddress,
     });
 
     await upsertEventFinancials(supabase, eventId, {
@@ -414,10 +440,11 @@ async function createDraftInvoiceForEvent(
       invoice_status: "draft",
       qbo_sync_error: null,
     });
+    return null;
   } catch (err) {
-    await upsertEventFinancials(supabase, eventId, {
-      qbo_sync_error: err instanceof Error ? err.message : "Something went wrong creating the invoice.",
-    });
+    const message = err instanceof Error ? err.message : "Something went wrong creating the invoice.";
+    await upsertEventFinancials(supabase, eventId, { qbo_sync_error: message });
+    return `QuickBooks: ${message}`;
   }
 }
 
@@ -431,9 +458,10 @@ export async function createInvoiceDraft(formData: FormData) {
     redirect(`/admin/events/${eventId}/booking?error=Connect QuickBooks in Settings first.`);
   }
 
-  await createDraftInvoiceForEvent(supabase, eventId, conn!);
+  const problem = await createDraftInvoiceForEvent(supabase, eventId, conn!);
 
   revalidatePath(`/admin/events/${eventId}/booking`);
+  redirect(`/admin/events/${eventId}/booking?${problem ? `error=${encodeURIComponent(problem)}` : "invoiceCreated=1#invoice"}`);
 }
 
 /**

@@ -8,6 +8,7 @@ import { isEmailConfigured, sendEmail, sendTemplatedEmail } from "@/lib/email";
 import { formatDate, formatDateTime } from "@/lib/labels";
 import { zonedTimeToIso } from "@/lib/calendar-dates";
 import { syncEventToGoogle, removeEventFromGoogle } from "@/lib/google-event-sync";
+import { getClientAddress, hasAddress, rememberClientAddress } from "@/lib/client-address";
 import { DISHWARE, EXTRA_HELP, SERVICES, SERVICE_STYLES, cleanValue, cleanValues } from "@/lib/event-details";
 
 async function requireAdmin() {
@@ -61,6 +62,20 @@ export async function updateEventOverview(formData: FormData) {
 
   revalidatePath(`/admin/events/${id}`);
   revalidatePath("/admin/events");
+}
+
+/** Overview tab: fill an event's address in from the client's saved home address. */
+export async function useClientHomeAddress(formData: FormData) {
+  await requireAdmin();
+  const supabase = createClient();
+  const eventId = String(formData.get("eventId"));
+  const { data: event } = await supabase.from("events").select("client_id").eq("id", eventId).single();
+  const home = await getClientAddress(supabase, event?.client_id);
+  if (home) {
+    await supabase.from("events").update({ ...home, venue_name: null }).eq("id", eventId);
+    await syncEventToGoogle(eventId);
+  }
+  revalidatePath(`/admin/events/${eventId}`);
 }
 
 /** Points this event at a different, already-existing client. */
@@ -168,6 +183,22 @@ export async function createEventDirect(formData: FormData) {
   const guestCountRaw = formData.get("guestCount");
   const guestCount = guestCountRaw ? Number(guestCountRaw) : null;
 
+  // Address left blank = they're hosting at home, so use the client's saved
+  // address. One typed in for a client with none saved becomes their home address.
+  let place = {
+    venue_name: nullIfEmpty(formData.get("venueName")),
+    address_line: nullIfEmpty(formData.get("addressLine")),
+    city: nullIfEmpty(formData.get("city")),
+    state: nullIfEmpty(formData.get("state")),
+    zip: nullIfEmpty(formData.get("zip")),
+  };
+  if (!hasAddress(place) && !place.venue_name) {
+    const home = await getClientAddress(supabase, clientId);
+    if (home) place = { ...place, ...home };
+  } else {
+    await rememberClientAddress(supabase, clientId, place);
+  }
+
   const { data: event, error: eventError } = await supabase
     .from("events")
     .insert({
@@ -176,11 +207,7 @@ export async function createEventDirect(formData: FormData) {
       event_type: String(formData.get("eventType") ?? "").trim() || "other",
       event_date: eventDate,
       status: String(formData.get("status") ?? "booked"),
-      venue_name: nullIfEmpty(formData.get("venueName")),
-      address_line: nullIfEmpty(formData.get("addressLine")),
-      city: nullIfEmpty(formData.get("city")),
-      state: nullIfEmpty(formData.get("state")),
-      zip: nullIfEmpty(formData.get("zip")),
+      ...place,
       guest_count: guestCount,
     })
     .select("id")
@@ -238,6 +265,8 @@ export async function quickAddEvent(
     clientId = newClient.id;
   }
 
+  const home = await getClientAddress(supabase, clientId);
+
   const { data: event, error: eventError } = await supabase
     .from("events")
     .insert({
@@ -245,6 +274,7 @@ export async function quickAddEvent(
       name,
       event_type: "other",
       event_date: eventDate,
+      ...(home ?? {}),
       // Default is a HOLD: most quick adds are a call/text that isn't confirmed yet.
       status: formData.get("status") === "booked" ? "booked" : "inquiry",
     })
