@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { EVENT_STATUS_LABELS, formatMoney } from "@/lib/labels";
+import { EVENT_STATUS_LABELS, formatDateTime, formatMoney } from "@/lib/labels";
 import { isEmailConfigured } from "@/lib/email";
 import { timeOfDayInZone } from "@/lib/calendar-dates";
 import {
@@ -64,7 +64,7 @@ export default async function EventBookingPage({
     supabase.from("qbo_connections").select("connected_at, realm_id").eq("id", true).single(),
     supabase.from("email_templates").select("id, name").eq("active", true).order("created_at"),
     supabase.from("events").select("*").eq("id", eventId).single(),
-    supabase.from("leads").select("message").eq("event_id", eventId).order("created_at", { ascending: false }).limit(1).maybeSingle(),
+    supabase.from("leads").select("message, consultation_at").eq("event_id", eventId).order("created_at", { ascending: false }).limit(1).maybeSingle(),
   ]);
 
   // Every event gets a proposal row the first time this page loads -- it's
@@ -142,6 +142,12 @@ export default async function EventBookingPage({
           <p className="muted small" style={{ margin: 0 }}>
             Total {formatMoney(financials.total_amount)} · Retainer {formatMoney(financials.deposit_amount)} · Balance{" "}
             {formatMoney(financials.balance_amount)}
+          </p>
+        )}
+        {lead?.consultation_at && (
+          <p className="small" style={{ margin: 0 }}>
+            {new Date(lead.consultation_at) > new Date() ? "Planning call booked: " : "Planning call was "}
+            <strong>{formatDateTime(lead.consultation_at)}</strong>
           </p>
         )}
         {searchParams.statusSaved && <p className="small" style={{ margin: 0 }}>✓ Booking status saved.</p>}
