@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { formatMoney, formatDate } from "@/lib/labels";
+import { formatMoney, formatDate, linePrice } from "@/lib/labels";
 import { SignaturePad } from "@/components/SignaturePad";
 import { signContract } from "./actions";
 import { effectiveOption, linesForOption } from "@/lib/proposals";
@@ -80,7 +80,7 @@ export default async function ClientDocumentsPage({
   };
 
   // The final quote (after the call), using the option Faith picked if there were two.
-  type Line = { id: string; description: string; line_total: number; note: string | null; option_label?: string | null };
+  type Line = { id: string; description: string; line_total: number; unit_price?: number; note: string | null; option_label?: string | null };
   const lines = (items ?? []) as Line[];
   const quoteLines = linesForOption(lines, effectiveOption(lines, proposal?.chosen_option));
 
@@ -230,7 +230,7 @@ export default async function ClientDocumentsPage({
               <h2 style={{ marginTop: 0 }}>Your quote</h2>
               <div style={{ display: "grid", gap: "1.25rem" }}>
                 {quoteLines.map((item) => (
-                  <LineItem key={item.id} description={String(item.description)} total={formatMoney(item.line_total)} note={item.note} />
+                  <LineItem key={item.id} description={String(item.description)} total={linePrice(item)} note={item.note} />
                 ))}
               </div>
               <div style={{ marginTop: "1.25rem", paddingTop: "0.75rem", borderTop: "1px solid var(--color-border)", display: "grid", gap: "0.25rem" }}>

@@ -41,10 +41,11 @@ export async function updateEventOverview(formData: FormData) {
     .from("events")
     .update({
       name: String(formData.get("name") ?? ""),
-      event_type: String(formData.get("eventType") ?? ""),
+      // Event type and venue name aren't on the form anymore; keep whatever's saved.
+      ...(formData.has("eventType") ? { event_type: String(formData.get("eventType") ?? "") } : {}),
       event_date: eventDate,
       status: String(formData.get("status") ?? "inquiry"),
-      venue_name: nullIfEmpty(formData.get("venueName")),
+      ...(formData.has("venueName") ? { venue_name: nullIfEmpty(formData.get("venueName")) } : {}),
       address_line: nullIfEmpty(formData.get("addressLine")),
       city: nullIfEmpty(formData.get("city")),
       state: nullIfEmpty(formData.get("state")),

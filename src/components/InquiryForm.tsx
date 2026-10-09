@@ -151,7 +151,6 @@ export function InquiryForm() {
           <Field label="Guest arrival time" name="guestArrivalTime" type="time" required />
           <Field label="Estimated guest count" name="guestCount" type="number" min={1} required />
         </Row>
-        <Field label="Venue name (if applicable)" name="venueName" />
         <Field label="Street address" name="addressLine" autoComplete="street-address" />
         <Row cols="2fr 1fr 1fr">
           <Field label="Town/City" name="city" required autoComplete="address-level2" />

@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { EVENT_STATUS_LABELS, formatDateTime, formatMoney } from "@/lib/labels";
+import { EVENT_STATUS_LABELS, formatDateTime, formatMoney, linePrice } from "@/lib/labels";
 import { isEmailConfigured } from "@/lib/email";
 import { timeOfDayInZone } from "@/lib/calendar-dates";
 import {
@@ -701,7 +701,7 @@ function Lines({ items, proposalId, eventId }: { items: Item[]; proposalId: stri
               {item.note && <div className="muted small">Client sees: {item.note}</div>}
             </div>
             <div style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-              <div>{formatMoney(item.line_total)}</div>
+              <div>{linePrice(item)}</div>
               <form action={removeProposalItem}>
                 <input type="hidden" name="id" value={item.id} />
                 <input type="hidden" name="proposalId" value={proposalId} />

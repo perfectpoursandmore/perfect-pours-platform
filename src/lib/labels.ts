@@ -80,3 +80,10 @@ export function formatDate(iso: string | null): string {
     new Date(year, month - 1, day)
   );
 }
+
+/** A proposal line's price: its total, or "$70.00/hr" for an hourly line with no hours set yet. */
+export function linePrice(item: { line_total: number | string | null; unit_price?: number | string | null }): string {
+  const total = Number(item.line_total ?? 0);
+  const rate = Number(item.unit_price ?? 0);
+  return total === 0 && rate > 0 ? `${formatMoney(rate)}/hr` : formatMoney(total);
+}

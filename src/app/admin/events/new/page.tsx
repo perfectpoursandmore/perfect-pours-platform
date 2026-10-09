@@ -86,10 +86,6 @@ export default async function NewEventPage({
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
           <div>
-            <label htmlFor="eventType">Event type</label>
-            <input id="eventType" name="eventType" placeholder="e.g. Birthday" />
-          </div>
-          <div>
             <label htmlFor="status">Status</label>
             <select
               id="status"

@@ -149,10 +149,6 @@ export default async function EventOverviewPage({
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
         <div>
-          <label htmlFor="eventType">Event type</label>
-          <input id="eventType" name="eventType" defaultValue={event.event_type} required />
-        </div>
-        <div>
           <label htmlFor="status">Status</label>
           <select
             id="status"
@@ -178,11 +174,6 @@ export default async function EventOverviewPage({
           <label htmlFor="guestCount">Guest count</label>
           <input id="guestCount" name="guestCount" type="number" min={1} defaultValue={event.guest_count ?? ""} />
         </div>
-      </div>
-
-      <div>
-        <label htmlFor="venueName">Venue name</label>
-        <input id="venueName" name="venueName" defaultValue={event.venue_name ?? ""} />
       </div>
 
       <div>

@@ -7,7 +7,7 @@ import { getCurrentUser } from "@/lib/auth/roles";
 import { effectiveOption, linesForOption, proposalOptions } from "@/lib/proposals";
 import { recomputeProposalTotals } from "@/lib/proposal-totals";
 import { renderContractBody } from "@/lib/contracts";
-import { EVENT_TYPE_LABELS, formatMoney, formatDate } from "@/lib/labels";
+import { EVENT_TYPE_LABELS, formatMoney, formatDate, linePrice } from "@/lib/labels";
 import { upsertEventFinancials, maybeMarkEventBooked } from "@/lib/event-financials";
 import {
   getValidConnection,
@@ -160,7 +160,7 @@ export async function generateContract(formData: FormData) {
     (items ?? [])
       .map(
         (i) =>
-          `${formatMoney(i.line_total)}${i.quantity > 1 ? ` (x${i.quantity})` : ""} — ${i.description}`
+          `${linePrice(i)}${i.quantity > 1 ? ` (x${i.quantity})` : ""} — ${i.description}`
       )
       .join("\n\n") || "(no line items yet)";
 

@@ -42,10 +42,6 @@ export function EventAddressFields({ initialClientId, homes }: { initialClientId
         </p>
       )}
       <div>
-        <label htmlFor="venueName">Venue name</label>
-        <input id="venueName" name="venueName" value={fields.venueName} onChange={set("venueName")} />
-      </div>
-      <div>
         <label htmlFor="addressLine">Address</label>
         <input id="addressLine" name="addressLine" value={fields.addressLine} onChange={set("addressLine")} />
       </div>

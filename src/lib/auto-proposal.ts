@@ -86,7 +86,10 @@ export function buildDraftProposal(e: EventForPricing, pl: PriceList): DraftResu
   if (services.length === 0) headsUps.push("No services are checked on the Overview tab yet.");
 
   const hours = scheduledHours(e);
-  const hourlyHours = Math.max(MIN_HOURS, hours ?? MIN_HOURS);
+  // Hours are only known once staff times are set (usually after the call).
+  // Until then hourly staff show just their rate -- no assumed hours, no total.
+  const hourlyHours = hours === null ? null : Math.max(MIN_HOURS, hours);
+  const g = gratuityLabel(pl);
 
   const wantsPackage = services.includes("signature_cocktails");
   const wantsBartender = services.includes("bartender");
@@ -136,16 +139,19 @@ export function buildDraftProposal(e: EventForPricing, pl: PriceList): DraftResu
   }
   if (wantsBartender && (!(wantsPackage && guests) || offerBoth)) {
     const count = guests ? bartendersNeeded(pl, guests) : 1;
+    const who = `${BARTENDER_ONLY.name}${count > 1 ? `s × ${count}` : ""}`;
     lines.push(
       line(
-        `${BARTENDER_ONLY.name}${count > 1 ? `s × ${count}` : ""}: ${hourlyHours} hrs at ${money(RATES.bartender)}/hr\n${BARTENDER_ONLY.description}`,
-        hourlyHours * count,
+        hourlyHours === null
+          ? `${who}: ${money(RATES.bartender)}/hr${count > 1 ? " per bartender" : ""} + ${g} gratuity\n${BARTENDER_ONLY.description}`
+          : `${who}: ${hourlyHours} hrs at ${money(RATES.bartender)}/hr\n${BARTENDER_ONLY.description}`,
+        hourlyHours === null ? 0 : hourlyHours * count,
         RATES.bartender,
         offerBoth ? null : BARTENDER_ONLY.note, // the note pitches the package, which is right next to it
         BAR
       )
     );
-    addGratuity(BAR, hourlyHours * count * RATES.bartender);
+    if (hourlyHours !== null) addGratuity(BAR, hourlyHours * count * RATES.bartender);
     if (count > 1) headsUps.push(`Priced with ${count} bartenders because of the guest count. Adjust if needed.`);
   }
 
@@ -159,13 +165,15 @@ export function buildDraftProposal(e: EventForPricing, pl: PriceList): DraftResu
     ].filter(Boolean);
     lines.push(
       line(
-        `${SERVER.name}: ${hourlyHours} hrs at ${money(RATES.server)}/hr\n${SERVER.description}`,
-        hourlyHours,
+        hourlyHours === null
+          ? `${SERVER.name}: ${money(RATES.server)}/hr + ${g} gratuity\n${SERVER.description}`
+          : `${SERVER.name}: ${hourlyHours} hrs at ${money(RATES.server)}/hr\n${SERVER.description}`,
+        hourlyHours === null ? 0 : hourlyHours,
         RATES.server,
         reasons.length > 0 ? SERVER.note : null // only mention extra staff when it's likely
       )
     );
-    addGratuity(null, hourlyHours * RATES.server);
+    if (hourlyHours !== null) addGratuity(null, hourlyHours * RATES.server);
     if (reasons.length > 0) {
       headsUps.push(`Might need a 2nd server (${reasons.join(", ")}). Priced with 1 for now. Add another if needed.`);
     }
@@ -173,10 +181,9 @@ export function buildDraftProposal(e: EventForPricing, pl: PriceList): DraftResu
 
   const hasHourlyStaff = (!wantsPackage && wantsBartender) || offerBoth || services.includes("server");
   if (hasHourlyStaff && hours === null) {
-    headsUps.push(`No staff arrival/end times yet, so hourly staff are priced at the ${MIN_HOURS}-hour minimum.`);
+    headsUps.push(`No staff times yet, so hourly staff show just their rate. Once you know their hours, add the staff times above and rebuild to price them (${MIN_HOURS}-hour minimum).`);
   }
 
-  const g = gratuityLabel(pl);
   if (!offerBoth) {
     const base = Array.from(gratuity.values()).reduce((a, b) => a + b, 0);
     if (base > 0) lines.push(line(`Gratuity (${g}) on hourly staff`, 1, round2(base * pl.gratuityRate)));
