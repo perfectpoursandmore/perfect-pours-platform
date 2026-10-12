@@ -504,8 +504,32 @@ export async function upsertEventStaffPayout(formData: FormData) {
  */
 export async function deleteEvent(formData: FormData) {
   await requireAdmin();
+  await removeEventAndRevalidate(String(formData.get("id")));
+  redirect("/admin/events");
+}
+
+/**
+ * Deletes a HOLD (an "inquiry" event) straight from the calendar quick view,
+ * for when the person decides not to book. Only works on holds, so a booked
+ * event can't be wiped out from the calendar by a stray click; those still
+ * go through the Delete card on the full event page. Unlike deleteEvent it
+ * doesn't redirect, so Faith stays on the calendar.
+ */
+export async function deleteHoldEvent(formData: FormData): Promise<{ error?: string }> {
+  await requireAdmin();
   const supabase = createClient();
   const id = String(formData.get("id"));
+
+  const { data: event } = await supabase.from("events").select("status").eq("id", id).single();
+  if (!event) return { error: "That event couldn't be found." };
+  if (event.status !== "inquiry") return { error: "Only holds can be deleted from the calendar." };
+
+  await removeEventAndRevalidate(id);
+  return {};
+}
+
+async function removeEventAndRevalidate(id: string) {
+  const supabase = createClient();
 
   // A lead that was converted into this event points back at it via
   // leads.event_id, which has no cascade — clear that link first or the
@@ -522,7 +546,6 @@ export async function deleteEvent(formData: FormData) {
   revalidatePath("/admin/clients");
   revalidatePath("/admin/payouts");
   revalidatePath("/staff");
-  redirect("/admin/events");
 }
 
 /**
