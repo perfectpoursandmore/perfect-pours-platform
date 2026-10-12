@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import type { FormEvent, ReactNode } from "react";
 import { EVENT_STATUS_LABELS, EVENT_TYPE_LABELS, formatDate, formatTime } from "@/lib/labels";
-import { assignStaffToEvent, removeEventStaffAssignment, updateEventStaffRole } from "../events/actions";
+import { assignStaffToEvent, deleteHoldEvent, removeEventStaffAssignment, updateEventStaffRole } from "../events/actions";
 import { QUICKVIEW_OPEN_EVENT } from "./quickview-bus";
 
 // Keep in sync with ROLE_OPTIONS on the full Staff tab
@@ -46,6 +47,7 @@ type QuickViewData = {
 };
 
 export function EventQuickView() {
+  const router = useRouter();
   const [eventId, setEventId] = useState<string | null>(null);
   const [data, setData] = useState<QuickViewData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -135,6 +137,27 @@ export function EventQuickView() {
     try {
       await updateEventStaffRole(formData);
       await load(eventId);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Only shown for HOLDs (status "inquiry"), for when the person decides not
+  // to book. Booked events still have to be deleted from the full event page.
+  async function handleDeleteHold() {
+    if (!eventId || !data) return;
+    if (!confirm(`Delete the hold for ${data.event.name}? This can't be undone.`)) return;
+    const formData = new FormData();
+    formData.set("id", eventId);
+    setBusy(true);
+    try {
+      const result = await deleteHoldEvent(formData);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      close();
+      router.refresh();
     } finally {
       setBusy(false);
     }
@@ -323,9 +346,29 @@ export function EventQuickView() {
               </button>
             </form>
 
-            <a href={`/admin/events/${data.event.id}`} style={{ fontSize: "0.9rem" }}>
-              Open full event details →
-            </a>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
+              <a href={`/admin/events/${data.event.id}`} style={{ fontSize: "0.9rem" }}>
+                Open full event details →
+              </a>
+              {data.event.status === "inquiry" && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={handleDeleteHold}
+                  style={{
+                    background: "none",
+                    border: "1px solid var(--color-danger)",
+                    borderRadius: 8,
+                    color: "var(--color-danger)",
+                    cursor: "pointer",
+                    fontSize: "0.85rem",
+                    padding: "0.4rem 0.75rem",
+                  }}
+                >
+                  Delete hold
+                </button>
+              )}
+            </div>
           </>
         )}
       </div>
