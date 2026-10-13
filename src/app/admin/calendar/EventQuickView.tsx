@@ -2,9 +2,16 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { FormEvent, ReactNode } from "react";
+import type { CSSProperties, FormEvent, ReactNode } from "react";
 import { EVENT_STATUS_LABELS, EVENT_TYPE_LABELS, formatDate, formatTime } from "@/lib/labels";
-import { assignStaffToEvent, deleteHoldEvent, removeEventStaffAssignment, updateEventStaffRole } from "../events/actions";
+import { timeOfDayInZone } from "@/lib/calendar-dates";
+import {
+  assignStaffToEvent,
+  deleteHoldEvent,
+  removeEventStaffAssignment,
+  updateEventQuickDetails,
+  updateEventStaffRole,
+} from "../events/actions";
 import { QUICKVIEW_OPEN_EVENT } from "./quickview-bus";
 
 // Keep in sync with ROLE_OPTIONS on the full Staff tab
@@ -21,6 +28,7 @@ type QuickViewEvent = {
   address_line: string | null;
   city: string | null;
   state: string | null;
+  zip: string | null;
   guest_count: number | null;
   status: string;
   staff_arrival_time: string | null;
@@ -53,6 +61,7 @@ export function EventQuickView() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState(false);
 
   const load = useCallback(async (id: string) => {
     setLoading(true);
@@ -75,6 +84,7 @@ export function EventQuickView() {
       const detail = (e as CustomEvent<{ eventId: string }>).detail;
       if (!detail?.eventId) return;
       setEventId(detail.eventId);
+      setEditing(false);
       void load(detail.eventId);
     }
     window.addEventListener(QUICKVIEW_OPEN_EVENT, onOpen);
@@ -85,6 +95,7 @@ export function EventQuickView() {
     setEventId(null);
     setData(null);
     setError(null);
+    setEditing(false);
   }, []);
 
   useEffect(() => {
@@ -108,6 +119,29 @@ export function EventQuickView() {
       await assignStaffToEvent(formData);
       await load(eventId);
       form.reset();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Date, times, guest count and address -- same fields (and same Google
+  // Calendar re-sync) as the full event page's Overview form.
+  async function handleSaveDetails(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!eventId) return;
+    const formData = new FormData(e.currentTarget);
+    formData.set("id", eventId);
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await updateEventQuickDetails(formData);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      setEditing(false);
+      await load(eventId);
+      router.refresh();
     } finally {
       setBusy(false);
     }
@@ -217,32 +251,83 @@ export function EventQuickView() {
               </button>
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.6rem", fontSize: "0.9rem" }}>
-              {data.event.client && (
-                <InfoField
-                  label="Client"
-                  value={
-                    data.event.client_id ? (
-                      <a href={`/admin/clients/${data.event.client_id}`}>
-                        {data.event.client.first_name} {data.event.client.last_name}
-                      </a>
-                    ) : (
-                      `${data.event.client.first_name} ${data.event.client.last_name}`
-                    )
-                  }
-                />
-              )}
-              <InfoField
-                label="Location"
-                value={[data.event.venue_name, data.event.address_line, data.event.city, data.event.state]
-                  .filter(Boolean)
-                  .join(", ") || "TBD"}
-              />
-              <InfoField label="Guest count" value={data.event.guest_count ? String(data.event.guest_count) : "—"} />
-              <InfoField label="Staff arrival" value={formatTime(data.event.staff_arrival_time)} />
-              <InfoField label="Event start" value={formatTime(data.event.guest_arrival_time)} />
-              <InfoField label="Staff end" value={formatTime(data.event.staff_end_time)} />
-            </div>
+            {editing ? (
+              <form onSubmit={handleSaveDetails} style={{ display: "grid", gap: "0.6rem", fontSize: "0.9rem" }}>
+                <div style={twoCol}>
+                  <Field label="Date" htmlFor="qv-eventDate">
+                    <input id="qv-eventDate" name="eventDate" type="date" required defaultValue={data.event.event_date} style={inputStyle} />
+                  </Field>
+                  <Field label="Guest count" htmlFor="qv-guestCount">
+                    <input id="qv-guestCount" name="guestCount" type="number" min={1} defaultValue={data.event.guest_count ?? ""} style={inputStyle} />
+                  </Field>
+                </div>
+                <div style={threeCol}>
+                  <Field label="Staff arrival" htmlFor="qv-staffArrivalTime">
+                    <input id="qv-staffArrivalTime" name="staffArrivalTime" type="time" defaultValue={timeOfDayInZone(data.event.staff_arrival_time)} style={inputStyle} />
+                  </Field>
+                  <Field label="Event start" htmlFor="qv-guestArrivalTime">
+                    <input id="qv-guestArrivalTime" name="guestArrivalTime" type="time" defaultValue={timeOfDayInZone(data.event.guest_arrival_time)} style={inputStyle} />
+                  </Field>
+                  <Field label="Staff end" htmlFor="qv-staffEndTime">
+                    <input id="qv-staffEndTime" name="staffEndTime" type="time" defaultValue={timeOfDayInZone(data.event.staff_end_time)} style={inputStyle} />
+                  </Field>
+                </div>
+                <Field label="Address" htmlFor="qv-addressLine">
+                  <input id="qv-addressLine" name="addressLine" defaultValue={data.event.address_line ?? ""} style={inputStyle} />
+                </Field>
+                <div style={threeCol}>
+                  <Field label="City" htmlFor="qv-city">
+                    <input id="qv-city" name="city" defaultValue={data.event.city ?? ""} style={inputStyle} />
+                  </Field>
+                  <Field label="State" htmlFor="qv-state">
+                    <input id="qv-state" name="state" defaultValue={data.event.state ?? ""} style={inputStyle} />
+                  </Field>
+                  <Field label="ZIP" htmlFor="qv-zip">
+                    <input id="qv-zip" name="zip" defaultValue={data.event.zip ?? ""} style={inputStyle} />
+                  </Field>
+                </div>
+                <div style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
+                  <button type="submit" className="button" disabled={busy}>
+                    {busy ? "Saving…" : "Save"}
+                  </button>
+                  <button type="button" disabled={busy} onClick={() => setEditing(false)} style={linkButton}>
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <div style={{ display: "grid", gap: "0.5rem" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.6rem", fontSize: "0.9rem" }}>
+                  {data.event.client && (
+                    <InfoField
+                      label="Client"
+                      value={
+                        data.event.client_id ? (
+                          <a href={`/admin/clients/${data.event.client_id}`}>
+                            {data.event.client.first_name} {data.event.client.last_name}
+                          </a>
+                        ) : (
+                          `${data.event.client.first_name} ${data.event.client.last_name}`
+                        )
+                      }
+                    />
+                  )}
+                  <InfoField
+                    label="Location"
+                    value={[data.event.venue_name, data.event.address_line, data.event.city, data.event.state]
+                      .filter(Boolean)
+                      .join(", ") || "TBD"}
+                  />
+                  <InfoField label="Guest count" value={data.event.guest_count ? String(data.event.guest_count) : "—"} />
+                  <InfoField label="Staff arrival" value={formatTime(data.event.staff_arrival_time)} />
+                  <InfoField label="Event start" value={formatTime(data.event.guest_arrival_time)} />
+                  <InfoField label="Staff end" value={formatTime(data.event.staff_end_time)} />
+                </div>
+                <button type="button" onClick={() => setEditing(true)} style={linkButton}>
+                  Edit date, times, guests or address
+                </button>
+              </div>
+            )}
 
             <div>
               <h3 style={{ margin: "0 0 0.5rem", fontSize: "0.95rem" }}>Staffing</h3>
@@ -375,6 +460,37 @@ export function EventQuickView() {
     </div>
   );
 }
+
+function Field({ label, htmlFor, children }: { label: string; htmlFor: string; children: ReactNode }) {
+  return (
+    <div>
+      <label htmlFor={htmlFor} style={{ fontSize: "0.75rem", color: "var(--color-muted)" }}>
+        {label}
+      </label>
+      {children}
+    </div>
+  );
+}
+
+const inputStyle: CSSProperties = {
+  width: "100%",
+  padding: "0.45rem 0.55rem",
+  borderRadius: 8,
+  border: "1px solid var(--color-border)",
+};
+
+const twoCol: CSSProperties = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.6rem" };
+const threeCol: CSSProperties = { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0.6rem" };
+
+const linkButton: CSSProperties = {
+  background: "none",
+  border: "none",
+  padding: 0,
+  color: "var(--color-accent)",
+  cursor: "pointer",
+  fontSize: "0.85rem",
+  justifySelf: "start",
+};
 
 function InfoField({ label, value }: { label: string; value: ReactNode }) {
   return (

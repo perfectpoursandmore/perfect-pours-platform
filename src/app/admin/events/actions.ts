@@ -266,7 +266,15 @@ export async function quickAddEvent(
     clientId = newClient.id;
   }
 
-  const home = await getClientAddress(supabase, clientId);
+  // Everything below is optional on the quick add form. A blank address
+  // falls back to the client's saved home address, same as before; one typed
+  // in for a client with none saved becomes their home address.
+  let place = readAddressFields(formData);
+  if (!hasAddress(place)) {
+    place = (await getClientAddress(supabase, clientId)) ?? place;
+  } else {
+    await rememberClientAddress(supabase, clientId, place);
+  }
 
   const { data: event, error: eventError } = await supabase
     .from("events")
@@ -275,7 +283,9 @@ export async function quickAddEvent(
       name,
       event_type: "other",
       event_date: eventDate,
-      ...(home ?? {}),
+      ...place,
+      guest_count: readGuestCount(formData),
+      ...readEventTimes(formData, eventDate),
       // Default is a HOLD: most quick adds are a call/text that isn't confirmed yet.
       status: formData.get("status") === "booked" ? "booked" : "inquiry",
     })
@@ -294,6 +304,68 @@ export async function quickAddEvent(
   revalidatePath("/staff");
 
   return { id: event.id };
+}
+
+/**
+ * Saves the handful of details Faith edits most from the calendar quick
+ * view -- date, the three times, guest count, and address -- without
+ * leaving the calendar. Writes the same columns the full event page's
+ * Overview form does (updateEventOverview) and re-syncs Google Calendar the
+ * same way, but leaves everything else on the event (name, status, venue,
+ * staff instructions) untouched. Returns an error for the modal to show
+ * inline instead of redirecting.
+ */
+export async function updateEventQuickDetails(formData: FormData): Promise<{ error?: string }> {
+  await requireAdmin();
+  const supabase = createClient();
+  const id = String(formData.get("id") ?? "");
+  const eventDate = String(formData.get("eventDate") ?? "");
+  if (!id) return { error: "That event couldn't be found." };
+  if (!eventDate) return { error: "The event needs a date." };
+
+  const { error } = await supabase
+    .from("events")
+    .update({
+      event_date: eventDate,
+      ...readEventTimes(formData, eventDate),
+      guest_count: readGuestCount(formData),
+      ...readAddressFields(formData),
+    })
+    .eq("id", id);
+
+  if (error) return { error: "Couldn't save those changes." };
+
+  await syncEventToGoogle(id);
+
+  revalidatePath(`/admin/events/${id}`);
+  revalidatePath("/admin/events");
+  revalidatePath("/admin/calendar");
+  revalidatePath("/staff");
+  return {};
+}
+
+function readAddressFields(formData: FormData) {
+  return {
+    address_line: nullIfEmpty(formData.get("addressLine")),
+    city: nullIfEmpty(formData.get("city")),
+    state: nullIfEmpty(formData.get("state")),
+    zip: nullIfEmpty(formData.get("zip")),
+  };
+}
+
+function readGuestCount(formData: FormData): number | null {
+  const raw = String(formData.get("guestCount") ?? "").trim();
+  const n = Number(raw);
+  return raw && Number.isFinite(n) ? n : null;
+}
+
+// Same "HH:MM on the event's own day" handling as updateEventOverview.
+function readEventTimes(formData: FormData, eventDate: string) {
+  return {
+    staff_arrival_time: zonedTimeToIso(eventDate, String(formData.get("staffArrivalTime") ?? "")),
+    guest_arrival_time: zonedTimeToIso(eventDate, String(formData.get("guestArrivalTime") ?? "")),
+    staff_end_time: zonedTimeToIso(eventDate, String(formData.get("staffEndTime") ?? "")),
+  };
 }
 
 export async function addEventNote(formData: FormData) {
