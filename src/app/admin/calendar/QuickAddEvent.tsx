@@ -3,13 +3,15 @@
 import { useState } from "react";
 import type { CSSProperties, FormEvent } from "react";
 import { quickAddEvent } from "../events/actions";
+import { openEventQuickView } from "./quickview-bus";
 
 type Client = { id: string; first_name: string; last_name: string | null };
 
 // Sits on the calendar page itself so getting something onto the calendar
-// never requires leaving it. Only asks for what the database actually
-// needs (a name, a date, and a client) -- everything else on the full
-// event page (address, pricing, timing, staff) is left for later.
+// never requires leaving it. Only a name, a date, and a client are required;
+// times, guest count and address can be filled in here too or left for
+// later. Once it's added, the event's quick view opens so staff can be
+// assigned straight away.
 export function QuickAddEvent({
   clients,
   defaultDate,
@@ -42,6 +44,7 @@ export function QuickAddEvent({
       }
       form.reset();
       setOpen(false);
+      openEventQuickView(result.id);
     } finally {
       setBusy(false);
     }
@@ -77,8 +80,8 @@ export function QuickAddEvent({
               <div>
                 <h2 style={{ margin: 0, fontSize: "1.1rem" }}>Quick add an event</h2>
                 <p style={{ margin: "0.25rem 0 0", color: "var(--color-muted)", fontSize: "0.85rem" }}>
-                  Just enough to hold the date — add pricing, address, and everything else later
-                  from the event page.
+                  Just enough to hold the date. Times, guests and address are optional; pricing and
+                  everything else can wait for the event page.
                 </p>
               </div>
               <button
@@ -148,6 +151,62 @@ export function QuickAddEvent({
                 />
               </div>
 
+              <div style={threeCol}>
+                <div>
+                  <label htmlFor="qa-staffArrivalTime" style={{ fontSize: "0.85rem" }}>
+                    Staff arrival
+                  </label>
+                  <input id="qa-staffArrivalTime" name="staffArrivalTime" type="time" style={inputStyle} />
+                </div>
+                <div>
+                  <label htmlFor="qa-guestArrivalTime" style={{ fontSize: "0.85rem" }}>
+                    Event start
+                  </label>
+                  <input id="qa-guestArrivalTime" name="guestArrivalTime" type="time" style={inputStyle} />
+                </div>
+                <div>
+                  <label htmlFor="qa-staffEndTime" style={{ fontSize: "0.85rem" }}>
+                    Staff end
+                  </label>
+                  <input id="qa-staffEndTime" name="staffEndTime" type="time" style={inputStyle} />
+                </div>
+              </div>
+
+              <div>
+                <label htmlFor="qa-guestCount" style={{ fontSize: "0.85rem" }}>
+                  Guest count
+                </label>
+                <input id="qa-guestCount" name="guestCount" type="number" min={1} style={inputStyle} />
+              </div>
+
+              <div>
+                <label htmlFor="qa-addressLine" style={{ fontSize: "0.85rem" }}>
+                  Address (leave blank to use their home address)
+                </label>
+                <input id="qa-addressLine" name="addressLine" style={inputStyle} />
+              </div>
+
+              <div style={threeCol}>
+                <div>
+                  <label htmlFor="qa-city" style={{ fontSize: "0.85rem" }}>
+                    City
+                  </label>
+                  <input id="qa-city" name="city" style={inputStyle} />
+                </div>
+                <div>
+                  <label htmlFor="qa-state" style={{ fontSize: "0.85rem" }}>
+                    State
+                  </label>
+                  <input id="qa-state" name="state" style={inputStyle} />
+                </div>
+                <div>
+                  <label htmlFor="qa-zip" style={{ fontSize: "0.85rem" }}>
+                    ZIP
+                  </label>
+                  <input id="qa-zip" name="zip" style={inputStyle} />
+                </div>
+              </div>
+
               <div>
                 <span style={{ display: "block", fontSize: "0.85rem", color: "var(--color-muted)", marginBottom: "0.35rem" }}>
                   Status
@@ -190,3 +249,5 @@ const inputStyle: CSSProperties = {
   borderRadius: 8,
   border: "1px solid var(--color-border)",
 };
+
+const threeCol: CSSProperties = { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0.6rem" };
