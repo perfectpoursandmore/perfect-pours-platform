@@ -21,7 +21,7 @@ import {
 } from "./actions";
 import { buildDraftProposal } from "@/lib/auto-proposal";
 import { getPriceList } from "@/lib/price-list";
-import { computeProposalTotals, effectiveOption, linesForOption, proposalOptions } from "@/lib/proposals";
+import { computeProposalTotals, linesForOption, proposalOptions } from "@/lib/proposals";
 import { DISHWARE, EXTRA_HELP, SERVICES, SERVICE_STYLES, type Option } from "@/lib/event-details";
 import { AddProposalItemFields } from "./AddProposalItemFields";
 
@@ -108,7 +108,8 @@ export default async function EventBookingPage({
       gratuityRatePercent: Number(proposal?.gratuity_rate ?? 0),
       taxRatePercent: Number(proposal?.tax_rate ?? 0),
     }).totalAmount;
-  const shownOption = effectiveOption(items, chosen);
+  // Two options and none picked: the stored total is only the first option's, so don't show it.
+  const undecided = options.length > 1 && !chosen;
 
   // The options feature needs a one-time database update (0022). select("*")
   // on proposals tells us whether it's been run.
@@ -422,7 +423,10 @@ export default async function EventBookingPage({
                   </strong>
                   <span className="small">
                     {chosen === opt && <span className="pill pill-done" style={{ marginRight: "0.5rem" }}>Chosen</span>}
-                    Total {formatMoney(totalFor(opt))}
+                    {/* An hourly line with no hours yet has no amount, so a total would be wrong. */}
+                    {items.some((i) => i.option_label === opt && Number(i.line_total) === 0 && Number(i.unit_price ?? 0) > 0)
+                      ? "Hourly, no total until hours are set"
+                      : `Total ${formatMoney(totalFor(opt))}`}
                   </span>
                 </div>
                 <Lines items={items.filter((i) => i.option_label === opt)} proposalId={proposal!.id} eventId={eventId} />
@@ -460,17 +464,24 @@ export default async function EventBookingPage({
 
         {proposal && items.length > 0 && (
           <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: "0.75rem", display: "grid", gap: "0.2rem" }}>
-            {options.length > 1 && !chosen && (
-              <p className="muted small" style={{ margin: "0 0 0.25rem" }}>
-                Totals shown for {shownOption} until you set which option they chose.
-              </p>
+            {undecided ? (
+              <>
+                <p className="muted small" style={{ margin: "0 0 0.25rem" }}>
+                  No total yet. It shows here once you set which option they chose.
+                </p>
+                {Number(proposal.discount_amount) > 0 && <Row label="Discount" value={`- ${formatMoney(proposal.discount_amount)}`} />}
+                {Number(proposal.fee_amount) > 0 && <Row label="Fee" value={formatMoney(proposal.fee_amount)} />}
+              </>
+            ) : (
+              <>
+                <Row label="Subtotal" value={formatMoney(proposal.subtotal)} />
+                {Number(proposal.discount_amount) > 0 && <Row label="Discount" value={`- ${formatMoney(proposal.discount_amount)}`} />}
+                {Number(proposal.fee_amount) > 0 && <Row label="Fee" value={formatMoney(proposal.fee_amount)} />}
+                {Number(proposal.gratuity_amount) > 0 && <Row label={`Gratuity (${proposal.gratuity_rate}%)`} value={formatMoney(proposal.gratuity_amount)} />}
+                {Number(proposal.tax_amount) > 0 && <Row label="Tax" value={formatMoney(proposal.tax_amount)} />}
+                <Row label="Total" value={formatMoney(proposal.total_amount)} strong />
+              </>
             )}
-            <Row label="Subtotal" value={formatMoney(proposal.subtotal)} />
-            {Number(proposal.discount_amount) > 0 && <Row label="Discount" value={`- ${formatMoney(proposal.discount_amount)}`} />}
-            {Number(proposal.fee_amount) > 0 && <Row label="Fee" value={formatMoney(proposal.fee_amount)} />}
-            {Number(proposal.gratuity_amount) > 0 && <Row label={`Gratuity (${proposal.gratuity_rate}%)`} value={formatMoney(proposal.gratuity_amount)} />}
-            {Number(proposal.tax_amount) > 0 && <Row label="Tax" value={formatMoney(proposal.tax_amount)} />}
-            <Row label="Total" value={formatMoney(proposal.total_amount)} strong />
             {Number(proposal.deposit_amount) > 0 && <Row label="Retainer due" value={formatMoney(proposal.deposit_amount)} />}
           </div>
         )}
