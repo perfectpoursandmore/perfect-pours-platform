@@ -3,7 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { formatMoney, formatDate, linePrice } from "@/lib/labels";
 import { SignaturePad } from "@/components/SignaturePad";
 import { signContract } from "./actions";
-import { effectiveOption, linesForOption } from "@/lib/proposals";
+import { effectiveOption, linesForOption, proposalOptions } from "@/lib/proposals";
 import { SERVICES } from "@/lib/event-details";
 import { getCurrentUser } from "@/lib/auth/roles";
 import { customQuoteReason, getPriceList, gratuityLabel, packageIncludes, tierBelow, tierFor, timingPolicies } from "@/lib/price-list";
@@ -83,6 +83,10 @@ export default async function ClientDocumentsPage({
   type Line = { id: string; description: string; line_total: number; unit_price?: number; note: string | null; option_label?: string | null };
   const lines = (items ?? []) as Line[];
   const quoteLines = linesForOption(lines, effectiveOption(lines, proposal?.chosen_option));
+  // Two options and nothing picked yet: show both, side by side, and no total
+  // (the stored total is just the first option's, which they haven't chosen).
+  const quoteOptions = proposalOptions(lines);
+  const undecided = quoteOptions.length > 1 && !(proposal?.chosen_option && quoteOptions.includes(proposal.chosen_option));
 
   return (
     <main style={{ padding: "2rem 1.5rem", maxWidth: 640, margin: "0 auto" }}>
@@ -228,11 +232,46 @@ export default async function ClientDocumentsPage({
           {contractReady && proposal && quoteLines.length > 0 && (
             <section className="card">
               <h2 style={{ marginTop: 0 }}>Your quote</h2>
+              {undecided ? (
+                <div style={{ display: "grid", gap: "1.5rem" }}>
+                  {quoteOptions.map((opt, idx) => (
+                    <div key={opt} style={{ display: "grid", gap: "1.25rem" }}>
+                      <p style={optionHeading}>
+                        Option {idx + 1}: {opt}
+                      </p>
+                      {lines
+                        .filter((i) => i.option_label === opt)
+                        .map((item) => (
+                          <LineItem key={item.id} description={String(item.description)} total={linePrice(item)} note={item.note} />
+                        ))}
+                    </div>
+                  ))}
+                  {lines.some((i) => !i.option_label) && (
+                    <div style={{ display: "grid", gap: "1.25rem" }}>
+                      <p style={optionHeading}>Included with either option</p>
+                      {lines
+                        .filter((i) => !i.option_label)
+                        .map((item) => (
+                          <LineItem key={item.id} description={String(item.description)} total={linePrice(item)} note={item.note} />
+                        ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
               <div style={{ display: "grid", gap: "1.25rem" }}>
                 {quoteLines.map((item) => (
                   <LineItem key={item.id} description={String(item.description)} total={linePrice(item)} note={item.note} />
                 ))}
               </div>
+              )}
+              {undecided ? (
+                <div style={{ marginTop: "1.25rem", paddingTop: "0.75rem", borderTop: "1px solid var(--color-border)", display: "grid", gap: "0.25rem" }}>
+                  {Number(proposal.deposit_amount) > 0 && <SummaryRow label="Retainer to book" value={formatMoney(proposal.deposit_amount)} />}
+                  <p style={{ margin: "0.25rem 0 0", fontSize: "0.88rem", color: "var(--color-muted)" }}>
+                    Your total depends on which option you choose. We&apos;ll confirm it with you once you&apos;ve picked.
+                  </p>
+                </div>
+              ) : (
               <div style={{ marginTop: "1.25rem", paddingTop: "0.75rem", borderTop: "1px solid var(--color-border)", display: "grid", gap: "0.25rem" }}>
                 {Number(proposal.discount_amount) > 0 && <SummaryRow label="Discount" value={`- ${formatMoney(proposal.discount_amount)}`} />}
                 {Number(proposal.fee_amount) > 0 && <SummaryRow label="Fee" value={formatMoney(proposal.fee_amount)} />}
@@ -243,6 +282,7 @@ export default async function ClientDocumentsPage({
                   <p style={{ margin: "0.25rem 0 0", fontSize: "0.82rem", color: "var(--color-muted)" }}>Plus applicable sales tax.</p>
                 )}
               </div>
+              )}
             </section>
           )}
 
@@ -347,6 +387,7 @@ function MenuItem({ title, price, priceNote, children }: { title: string; price:
 
 const listStyle = { margin: "0.4rem 0 0", paddingLeft: "1.1rem", display: "grid", gap: "0.25rem", fontSize: "0.93rem" } as const;
 const bodyText = { margin: 0, color: "var(--color-muted)", lineHeight: 1.5 } as const;
+const optionHeading = { margin: 0, fontSize: "0.82rem", fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--color-accent)" } as const;
 const smallNote = { margin: "0.6rem 0 0", fontSize: "0.88rem", color: "var(--color-muted)" } as const;
 
 function SummaryRow({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
