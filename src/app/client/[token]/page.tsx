@@ -78,6 +78,8 @@ export default async function ClientDocumentsPage({
     server: showAll || wanted.includes("server"),
     other: SERVICES.filter((o) => wanted.includes(o.value) && !barServices.includes(o.value) && o.value !== "not_sure").map((o) => o.label),
   };
+  // Package and bartender only are alternatives, so label them Option A / Option B.
+  const bothOptions = Boolean(menu.package && menu.bartender);
 
   // The final quote (after the call), using the option Faith picked if there were two.
   type Line = { id: string; description: string; line_total: number; unit_price?: number; note: string | null; option_label?: string | null };
@@ -125,6 +127,7 @@ export default async function ClientDocumentsPage({
                 <div style={{ display: "grid", gap: "1.75rem", marginTop: "1.5rem" }}>
                   {menu.package && (
                     <MenuItem
+                      label={bothOptions ? "Option A" : undefined}
                       title={priceList.package.name}
                       price={menu.package.tier ? dollars(menu.package.tier.price) : "Custom quote"}
                       priceNote={
@@ -160,8 +163,11 @@ export default async function ClientDocumentsPage({
                     </MenuItem>
                   )}
 
+                  {bothOptions && <OrDivider />}
+
                   {menu.bartender && (
                     <MenuItem
+                      label={bothOptions ? "Option B" : undefined}
                       title={`${priceList.bartenderOnly.name}${menu.package ? " only" : ""}`}
                       price={`${dollars(priceList.rates.bartender)}/hr`}
                       priceNote={`+ ${gratuityLabel(priceList)} gratuity · ${priceList.minHours}-hour minimum (includes setup)`}
@@ -237,7 +243,7 @@ export default async function ClientDocumentsPage({
                   {quoteOptions.map((opt, idx) => (
                     <div key={opt} style={{ display: "grid", gap: "1.25rem" }}>
                       <p style={optionHeading}>
-                        Option {idx + 1}: {opt}
+                        Option {String.fromCharCode(65 + idx)}: {opt}
                       </p>
                       {lines
                         .filter((i) => i.option_label === opt)
@@ -372,9 +378,10 @@ function dollars(n: number): string {
   return Number.isInteger(Number(n)) ? `$${Number(n).toLocaleString("en-US")}` : formatMoney(n);
 }
 
-function MenuItem({ title, price, priceNote, children }: { title: string; price: string; priceNote: string; children: React.ReactNode }) {
+function MenuItem({ label, title, price, priceNote, children }: { label?: string; title: string; price: string; priceNote: string; children: React.ReactNode }) {
   return (
     <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: "1.25rem" }}>
+      {label && <p style={{ ...optionHeading, marginBottom: "0.3rem" }}>{label}</p>}
       <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", alignItems: "baseline" }}>
         <strong style={{ fontSize: "1.08rem" }}>{title}</strong>
         <strong style={{ fontSize: "1.08rem", whiteSpace: "nowrap" }}>{price}</strong>
@@ -382,6 +389,15 @@ function MenuItem({ title, price, priceNote, children }: { title: string; price:
       <p style={{ margin: "0.2rem 0 0", fontSize: "0.86rem", color: "var(--color-muted)" }}>{priceNote}</p>
       <div style={{ marginTop: "0.75rem" }}>{children}</div>
     </div>
+  );
+}
+
+/** Sits between Option A and Option B so they read as a choice, not one price. */
+function OrDivider() {
+  return (
+    <p style={{ margin: "-0.75rem 0", textAlign: "center", color: "var(--color-muted)", fontSize: "0.85rem", fontWeight: 600, letterSpacing: "0.08em" }}>
+      OR
+    </p>
   );
 }
 
