@@ -31,9 +31,10 @@ export default async function AdminCalendarPage({
   const anchor = searchParams.date && /^\d{4}-\d{2}-\d{2}$/.test(searchParams.date) ? searchParams.date : today;
 
   // Booked events, plus inquiries shown as HOLDs so a pending request still
-  // makes its date look taken (nobody books over it). Cancelled ones are
-  // fetched so they show crossed out rather than silently open.
-  const relevantStatuses = ["booked", "completed", "cancelled", "inquiry"];
+  // makes its date look taken (nobody books over it). Cancelled events are
+  // left off entirely so the date reads as open again; the event itself
+  // is kept and still shows on the Events list.
+  const relevantStatuses = ["booked", "completed", "inquiry"];
 
   let rangeStart = anchor;
   let rangeEnd = anchor;
