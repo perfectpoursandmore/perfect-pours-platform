@@ -23,7 +23,7 @@ export async function addCatalogItem(formData: FormData) {
     internal_notes: String(formData.get("internalNotes") ?? "") || null,
   });
 
-  revalidatePath("/admin/catalog");
+  revalidatePath("/admin/services");
 }
 
 /** Edits an existing catalog item's name, category, price, pricing type, description, or notes. */
@@ -44,8 +44,8 @@ export async function updateCatalogItem(formData: FormData) {
     })
     .eq("id", id);
 
-  revalidatePath("/admin/catalog");
-  redirect("/admin/catalog");
+  revalidatePath("/admin/services");
+  redirect("/admin/services");
 }
 
 export async function toggleCatalogItemActive(formData: FormData) {
@@ -56,5 +56,5 @@ export async function toggleCatalogItemActive(formData: FormData) {
 
   await supabase.from("catalog_items").update({ active: !active }).eq("id", id);
 
-  revalidatePath("/admin/catalog");
+  revalidatePath("/admin/services");
 }

@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { PRICING_TYPE_LABELS } from "@/lib/labels";
-import { updateCatalogItem } from "../../actions";
+import { updateCatalogItem } from "../../catalog-actions";
 
 export default async function EditCatalogItemPage({ params }: { params: { id: string } }) {
   const supabase = createClient();
