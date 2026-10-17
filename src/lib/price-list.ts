@@ -1,5 +1,5 @@
 // Faith's price list -- prices, package contents, and the client-facing
-// wording. It's edited from the admin "Price List" page and saved in the
+// wording. It's edited from the admin "Services" page and saved in the
 // `price_list` table. Automatic proposals and the client's pricing page
 // both read it from there, so one edit updates everything going forward.
 //

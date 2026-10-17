@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { PRICING_TYPE_LABELS, formatMoney } from "@/lib/labels";
-import { addCatalogItem, toggleCatalogItemActive } from "./actions";
+import { addCatalogItem, toggleCatalogItemActive } from "./catalog-actions";
 
-export default async function CatalogPage() {
+export async function CatalogSection() {
   const supabase = createClient();
   const { data: items } = await supabase
     .from("catalog_items")
@@ -12,9 +12,9 @@ export default async function CatalogPage() {
     .order("name");
 
   return (
-    <div style={{ display: "grid", gap: "1.5rem", maxWidth: 720 }}>
+    <div id="catalog" style={{ display: "grid", gap: "1.5rem" }}>
       <div>
-        <h1 style={{ margin: 0 }}>Catalog</h1>
+        <h2 style={{ margin: 0 }}>Proposal items</h2>
         <p style={{ color: "var(--color-muted)" }}>
           Your frequently sold services and rentals — build proposals from this instead of
           retyping pricing every time.
@@ -79,7 +79,7 @@ export default async function CatalogPage() {
         </div>
 
         <button type="submit" className="button" style={{ justifySelf: "start" }}>
-          Add to catalog
+          Add item
         </button>
       </form>
 
@@ -123,7 +123,7 @@ export default async function CatalogPage() {
                   <td style={{ padding: "0.75rem 1rem" }}>{item.active ? "Active" : "Inactive"}</td>
                   <td style={{ padding: "0.75rem 1rem" }}>
                     <div style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
-                      <Link href={`/admin/catalog/${item.id}/edit`} style={{ color: "var(--color-accent)" }}>
+                      <Link href={`/admin/services/${item.id}/edit`} style={{ color: "var(--color-accent)" }}>
                         Edit
                       </Link>
                       <form action={toggleCatalogItemActive}>
@@ -144,7 +144,7 @@ export default async function CatalogPage() {
           </table>
         ) : (
           <p style={{ padding: "1.5rem", color: "var(--color-muted)", margin: 0 }}>
-            No catalog items yet — add your first one above.
+            No proposal items yet — add your first one above.
           </p>
         )}
       </div>

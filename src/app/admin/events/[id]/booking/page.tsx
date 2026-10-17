@@ -295,7 +295,7 @@ export default async function EventBookingPage({
         <div>
           <h2 style={h2}>Send pricing</h2>
           <p className="muted small" style={{ margin: "0.25rem 0 0" }}>
-            Sends them a menu of the services they asked about, with prices and descriptions from your Price List, plus a
+            Sends them a menu of the services they asked about, with prices and descriptions from your Services page, plus a
             button to book a planning call.
           </p>
         </div>

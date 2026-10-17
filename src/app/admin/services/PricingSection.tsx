@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { EVENT_TYPE_LABELS, formatMoney } from "@/lib/labels";
 import { getPriceList, gratuityLabel, staffPriceLine } from "@/lib/price-list";
-import { savePriceList } from "./actions";
+import { savePriceList } from "./pricing-actions";
 
 const textareaStyle = {
   width: "100%",
@@ -16,7 +16,7 @@ const textareaStyle = {
 const hint = { margin: "0.25rem 0 0", fontSize: "0.82rem", color: "var(--color-muted)" } as const;
 const grid2 = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "1rem" } as const;
 
-export default async function PriceListPage({
+export async function PricingSection({
   searchParams,
 }: {
   searchParams: { saved?: string; error?: string };
@@ -34,9 +34,9 @@ export default async function PriceListPage({
   const addonRows = [...pl.addOns, null, null, null]; // three blank rows to add add-ons
 
   return (
-    <div style={{ display: "grid", gap: "1.5rem", maxWidth: 760 }}>
+    <div id="pricing" style={{ display: "grid", gap: "1.5rem" }}>
       <div>
-        <h1 style={{ margin: 0 }}>Price List</h1>
+        <h2 style={{ margin: 0 }}>Pricing page</h2>
         <p style={{ color: "var(--color-muted)", marginBottom: 0 }}>
           Everything clients see on their pricing page, in one place. Change anything here and hit{" "}
           <strong>Save</strong>. New pricing drafts and every client&apos;s pricing page pick it up right away.
@@ -53,7 +53,7 @@ export default async function PriceListPage({
           changes can be saved. Until then, this page shows your current prices but Save won&apos;t work.
         </p>
       )}
-      {searchParams.saved && <p style={{ margin: 0, color: "var(--color-text)" }}>✓ Price list saved.</p>}
+      {searchParams.saved && <p style={{ margin: 0, color: "var(--color-text)" }}>✓ Pricing saved.</p>}
       {searchParams.error && <p style={{ margin: 0, color: "var(--color-danger)" }}>{searchParams.error}</p>}
 
       {/* At a glance */}
@@ -278,7 +278,7 @@ export default async function PriceListPage({
           }}
         >
           <button type="submit" className="button" disabled={tableMissing}>
-            Save price list
+            Save pricing
           </button>
         </div>
       </form>

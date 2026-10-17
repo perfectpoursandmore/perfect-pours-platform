@@ -20,7 +20,7 @@ const num = (f: FormData, k: string) => {
 };
 
 function fail(message: string): never {
-  redirect(`/admin/price-list?error=${encodeURIComponent(message)}`);
+  redirect(`/admin/services?error=${encodeURIComponent(message)}`);
 }
 
 function slug(label: string): string {
@@ -137,7 +137,7 @@ export async function savePriceList(formData: FormData) {
     );
   }
 
-  revalidatePath("/admin/price-list");
+  revalidatePath("/admin/services");
   revalidatePath("/admin");
-  redirect("/admin/price-list?saved=1");
+  redirect("/admin/services?saved=1");
 }
