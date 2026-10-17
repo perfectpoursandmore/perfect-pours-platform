@@ -19,7 +19,6 @@ function handleClick(eventId: string) {
 // Small block chip used in the month and week grids.
 export function EventChip({ event }: { event: CalendarEvent }) {
   const client = clientName(event);
-  const cancelled = event.status === "cancelled";
   const hold = event.status === "inquiry";
   return (
     <a
@@ -31,9 +30,9 @@ export function EventChip({ event }: { event: CalendarEvent }) {
         padding: "0.15rem 0.35rem",
         borderRadius: 4,
         marginBottom: 2,
-        textDecoration: cancelled ? "line-through" : "none",
-        color: cancelled ? "var(--color-muted)" : "inherit",
-        background: cancelled ? "transparent" : hold ? "#fff" : "var(--color-soft)",
+        textDecoration: "none",
+        color: "inherit",
+        background: hold ? "#fff" : "var(--color-soft)",
         border: hold ? "1px dashed var(--color-accent)" : "1px solid transparent",
         whiteSpace: "nowrap",
         overflow: "hidden",
