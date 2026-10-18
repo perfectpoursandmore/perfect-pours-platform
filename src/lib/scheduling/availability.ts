@@ -1,6 +1,15 @@
 import { addDaysToDateString, utcToZonedDateString, weekdayOf, zonedTimeToUtc } from "./timezone";
 
-export type DayHours = { start: string; end: string } | null;
+export type TimeRange = { start: string; end: string };
+
+/** One range, or several blocks in a day (e.g. 8-10am and 3:30-5:30pm). */
+export type DayHours = TimeRange | TimeRange[] | null;
+
+/** A day's bookable blocks, whichever shape they were saved in. */
+export function dayRanges(hours: DayHours | undefined): TimeRange[] {
+  if (!hours) return [];
+  return (Array.isArray(hours) ? hours : [hours]).filter((r) => r.start && r.end && r.start < r.end);
+}
 
 /** Keyed 0 (Sunday) .. 6 (Saturday). */
 export type WeeklyHours = Record<number, DayHours>;
@@ -31,14 +40,19 @@ export interface Slot {
  * admin's availability settings, the calendar dates that are blocked out,
  * and the busy blocks read from Google Calendar, returns every bookable
  * slot. Callers are responsible for fetching busyBlocks from Google first.
+ *
+ * When `openWindows` is given (Faith's "Call times" events on Google
+ * Calendar), slots are offered only inside those windows and the weekly
+ * hours are ignored.
  */
 export function getAvailableSlots(params: {
   settings: ConsultationSettings;
   blockedDates: Set<string>; // "YYYY-MM-DD", in the business's local calendar
   busyBlocks: BusyBlock[];
+  openWindows?: BusyBlock[];
   now: Date;
 }): Slot[] {
-  const { settings, blockedDates, busyBlocks, now } = params;
+  const { settings, blockedDates, busyBlocks, openWindows, now } = params;
 
   if (settings.vacationMode) return [];
 
@@ -60,25 +74,23 @@ export function getAvailableSlots(params: {
   const todayLocal = utcToZonedDateString(now, timeZone);
   const slots: Slot[] = [];
 
-  for (let dayOffset = 0; dayOffset <= maxAdvanceDays; dayOffset++) {
-    const dateStr = addDaysToDateString(todayLocal, dayOffset);
+  const latestAllowedMillis = zonedTimeToUtc(
+    addDaysToDateString(todayLocal, maxAdvanceDays + 1),
+    "00:00",
+    timeZone
+  ).getTime();
 
-    if (blockedDates.has(dateStr)) continue;
-
-    const hours = weeklyHours[weekdayOf(dateStr)];
-    if (!hours) continue;
-
-    const dayStart = zonedTimeToUtc(dateStr, hours.start, timeZone).getTime();
-    const dayEnd = zonedTimeToUtc(dateStr, hours.end, timeZone).getTime();
-
+  const addSlotsWithin = (rangeStart: number, rangeEnd: number) => {
     for (
-      let slotStartMillis = dayStart;
-      slotStartMillis + slotLengthMillis <= dayEnd;
+      let slotStartMillis = rangeStart;
+      slotStartMillis + slotLengthMillis <= rangeEnd;
       slotStartMillis += slotLengthMillis
     ) {
       const slotEndMillis = slotStartMillis + slotLengthMillis;
 
       if (slotStartMillis < earliestAllowedMillis) continue;
+      if (slotStartMillis >= latestAllowedMillis) continue;
+      if (blockedDates.has(utcToZonedDateString(new Date(slotStartMillis), timeZone))) continue;
 
       const protectedStart = slotStartMillis - bufferBeforeMillis;
       const protectedEnd = slotEndMillis + bufferAfterMillis;
@@ -90,6 +102,23 @@ export function getAvailableSlots(params: {
       if (!conflicts) {
         slots.push({ start: new Date(slotStartMillis), end: new Date(slotEndMillis) });
       }
+    }
+  };
+
+  if (openWindows) {
+    for (const w of openWindows) addSlotsWithin(w.start.getTime(), w.end.getTime());
+    // Overlapping "Call times" events could offer the same slot twice.
+    const unique = new Map(slots.map((s) => [s.start.getTime(), s]));
+    return Array.from(unique.values()).sort((a, b) => a.start.getTime() - b.start.getTime());
+  }
+
+  for (let dayOffset = 0; dayOffset <= maxAdvanceDays; dayOffset++) {
+    const dateStr = addDaysToDateString(todayLocal, dayOffset);
+    for (const range of dayRanges(weeklyHours[weekdayOf(dateStr)])) {
+      addSlotsWithin(
+        zonedTimeToUtc(dateStr, range.start, timeZone).getTime(),
+        zonedTimeToUtc(dateStr, range.end, timeZone).getTime()
+      );
     }
   }
 

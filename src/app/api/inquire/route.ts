@@ -2,9 +2,11 @@ import { NextResponse } from "next/server";
 import { rememberClientAddress } from "@/lib/client-address";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isEmailConfigured, sendEmail } from "@/lib/email";
-import { EVENT_TYPE_LABELS, formatDate } from "@/lib/labels";
+import { EVENT_TYPE_LABELS, formatDate, formatDateTime } from "@/lib/labels";
 import { syncEventToGoogle } from "@/lib/google-event-sync";
 import { zonedTimeToIso } from "@/lib/calendar-dates";
+import { createConsultationEvent, getValidAccessToken } from "@/lib/google-calendar";
+import { loadAvailableSlots } from "@/lib/scheduling/load-availability";
 import {
   DISHWARE,
   EXTRA_HELP,
@@ -16,13 +18,16 @@ import {
   labelsFor,
 } from "@/lib/event-details";
 
-// Public "tell us about your event" form -- the price-first replacement for
-// booking a consultation call up front. One submission:
-//   1. finds the client by email (repeat clients aren't duplicated) or creates them,
-//   2. creates the event as an Inquiry, so the date shows as a HOLD on the
+// Public contact form: they pick a time for a 15-minute call, then tell us
+// about their event. The quote goes out after the call, never from here.
+// One submission:
+//   1. re-checks the call time is still open and puts it on Faith's Google Calendar,
+//   2. finds the client by email (repeat clients aren't duplicated) or creates them,
+//   3. creates the event as an Inquiry, so the date shows as a HOLD on the
 //      platform calendar and Google Calendar right away,
-//   3. records the lead for the paper trail,
-//   4. emails Faith (with a heads-up if that date already has something on it).
+//   4. records the lead (with the call time) for the paper trail,
+//   5. emails Faith the call time and their answers (with a heads-up if that
+//      date already has something on it), and confirms the call to them.
 
 function str(v: unknown): string {
   return typeof v === "string" ? v.trim() : "";
@@ -85,7 +90,46 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Please check at least one service you're interested in." }, { status: 400 });
   }
 
+  // The call time. Re-checked here because the list in their browser could
+  // be stale, or someone else may have just taken it.
+  const slotStart = new Date(str(body.slotStart));
+  if (Number.isNaN(slotStart.getTime())) {
+    return NextResponse.json({ error: "Please pick a time for your call." }, { status: 400 });
+  }
+  const { slots } = await loadAvailableSlots();
+  const call = slots.find((s) => s.start.getTime() === slotStart.getTime());
+  if (!call) {
+    return NextResponse.json(
+      { error: "That call time was just booked or is no longer available. Please pick another." },
+      { status: 409 }
+    );
+  }
+  const callLabel = formatDateTime(call.start.toISOString());
+
   const supabase = createAdminClient();
+
+  // Best-effort: the call goes on Faith's calendar so nobody else can book
+  // it. A calendar hiccup never loses the lead; the email below still has it.
+  try {
+    const calendar = await getValidAccessToken();
+    if (calendar) {
+      const { data: settingsRow } = await supabase.from("consultation_settings").select("time_zone").eq("id", true).single();
+      await createConsultationEvent({
+        accessToken: calendar.accessToken,
+        calendarId: calendar.calendarId,
+        start: call.start,
+        end: call.end,
+        timeZone: settingsRow?.time_zone ?? "America/New_York",
+        clientName: `${firstName} ${lastName}`,
+        clientEmail: email,
+        clientPhone: phone,
+        eventType: EVENT_TYPE_LABELS[eventType] ?? eventType,
+      });
+    }
+  } catch (err) {
+    console.error("Inquiry: couldn't put the call on Google Calendar:", err);
+  }
+
   // "Other" uses whatever they typed, e.g. "Retirement party".
   const typeLabel = eventType === "other" && eventTypeOther ? eventTypeOther : EVENT_TYPE_LABELS[eventType] ?? eventType;
   const guestArrivalIso = zonedTimeToIso(eventDate, guestArrivalTime);
@@ -166,7 +210,8 @@ export async function POST(request: Request) {
     zip,
     guest_count: guestCount,
     how_heard: howHeard,
-    status: "new_inquiry",
+    status: "consultation_scheduled",
+    consultation_at: call.start.toISOString(),
     client_id: clientId,
     event_id: event.id,
     service_style: serviceStyle,
@@ -200,8 +245,8 @@ export async function POST(request: Request) {
       const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://perfect-pours-platform.vercel.app";
       await sendEmail({
         to: process.env.ADMIN_NOTIFICATION_EMAIL || "faith@perfectpoursandmore.com",
-        subject: `New inquiry: ${firstName} ${lastName}, ${typeLabel} on ${formatDate(eventDate)}${repeatClient ? " (repeat client)" : ""}`,
-        html: `<p>A new inquiry just came in through the website. The date is on your calendar as a HOLD.</p>
+        subject: `Call booked ${callLabel}: ${firstName} ${lastName}, ${typeLabel} on ${formatDate(eventDate)}${repeatClient ? " (repeat client)" : ""}`,
+        html: `<p><strong>${esc(firstName)} ${esc(lastName)} booked a 15-minute call for ${callLabel}.</strong> Call them at <a href="tel:${esc(phone)}">${esc(phone)}</a>. Their answers are below, and their event date is on your calendar as a HOLD.</p>
 ${conflictNote}
 <ul>
 <li><strong>Name:</strong> ${esc(firstName)} ${esc(lastName)}${repeatClient ? " (repeat client)" : ""}</li>
@@ -225,9 +270,10 @@ ${message ? `<p><strong>Their note:</strong><br>${esc(message).replace(/\n/g, "<
     try {
       await sendEmail({
         to: email,
-        subject: `Got your details for ${typeLabel.toLowerCase()} on ${formatDate(eventDate)}`,
+        subject: `Your call with Perfect Pours & More: ${callLabel}`,
         html: `<p>Hi ${esc(firstName)},</p>
-<p>Thank you for reaching out about your ${esc(typeLabel.toLowerCase())} on ${formatDate(eventDate)}! We've received your details and will send over pricing for your event. You'll hear back from us within 24 hours, or within 48 hours if you reached out over the weekend.</p>
+<p>Thank you for reaching out about your ${esc(typeLabel.toLowerCase())} on ${formatDate(eventDate)}! Your 15-minute call is booked for <strong>${callLabel}</strong> (Eastern Time). We'll call you at ${esc(phone)}.</p>
+<p>After we chat, we'll send over a personalized quote for your event.</p>
 <p>We can't wait to help you host stress-free!</p>
 <p>Questions in the meantime? Email <a href="mailto:faith@perfectpoursandmore.com">faith@perfectpoursandmore.com</a> or shoot us a text at <a href="sms:+19142636709">914-263-6709</a>.</p>
 <p>Cheers,<br>Faith<br>Perfect Pours &amp; More</p>`,

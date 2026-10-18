@@ -6,6 +6,8 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/roles";
 
 const DAYS = [0, 1, 2, 3, 4, 5, 6];
+// Matches the number of time blocks shown per day on the settings page.
+const BLOCKS_PER_DAY = 3;
 
 async function requireAdmin() {
   const user = await getCurrentUser();
@@ -16,12 +18,17 @@ export async function saveConsultationSettings(formData: FormData) {
   await requireAdmin();
   const supabase = createClient();
 
-  const weeklyHours: Record<number, { start: string; end: string } | null> = {};
+  const weeklyHours: Record<number, { start: string; end: string }[] | null> = {};
   for (const day of DAYS) {
     const enabled = formData.get(`day-${day}-enabled`) === "on";
-    const start = String(formData.get(`day-${day}-start`) ?? "");
-    const end = String(formData.get(`day-${day}-end`) ?? "");
-    weeklyHours[day] = enabled && start && end ? { start, end } : null;
+    const blocks: { start: string; end: string }[] = [];
+    for (let i = 0; i < BLOCKS_PER_DAY; i++) {
+      const start = String(formData.get(`day-${day}-start-${i}`) ?? "");
+      const end = String(formData.get(`day-${day}-end-${i}`) ?? "");
+      if (start && end && start < end) blocks.push({ start, end });
+    }
+    blocks.sort((a, b) => a.start.localeCompare(b.start));
+    weeklyHours[day] = enabled && blocks.length > 0 ? blocks : null;
   }
 
   await supabase

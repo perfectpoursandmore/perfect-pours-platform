@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { BookingFlow } from "@/components/BookingFlow";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { EVENT_TYPE_LABELS, formatDate } from "@/lib/labels";
@@ -6,6 +7,9 @@ export const metadata = { title: "Schedule a Call — Perfect Pours & More" };
 export const dynamic = "force-dynamic";
 
 export default async function BookPage({ searchParams }: { searchParams: { event?: string } }) {
+  // New visitors use the contact form, which starts with picking a call time.
+  if (!searchParams.event) redirect("/inquire");
+
   // Coming from their pricing page? Then we already have everything -- they
   // just pick a time.
   let known: { token: string; firstName: string; summary: string } | null = null;

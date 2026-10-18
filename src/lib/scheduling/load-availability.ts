@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getBusyBlocks, getValidAccessToken } from "@/lib/google-calendar";
+import { getCallWindowsAndBusy, getValidAccessToken } from "@/lib/google-calendar";
 import { getAvailableSlots, type ConsultationSettings, type Slot } from "./availability";
+import { zonedTimeToUtc } from "./timezone";
 
 /**
  * Loads the admin's current consultation settings + blocked dates + Google
@@ -51,20 +52,31 @@ export async function loadAvailableSlots(now: Date = new Date()): Promise<{
   // calendar trouble block the core flow" pattern used when creating the
   // consultation event in the booking route itself.
   let calendar: { accessToken: string; calendarId: string } | null = null;
+  //
+  // Faith can also open up one-off call times right on her calendar: if she
+  // has any events titled "Call times", only time inside them is offered.
+  // Otherwise the weekly hours from settings apply. Either way, anything
+  // else on her calendar blocks the time.
   let busyBlocks: Slot[] = [];
+  let openWindows: Slot[] | undefined;
   try {
     calendar = await getValidAccessToken();
     if (calendar) {
-      const timeMax = new Date(now.getTime() + (settings.maxAdvanceDays + 1) * 86400000);
-      busyBlocks = await getBusyBlocks(calendar.accessToken, calendar.calendarId, now, timeMax);
+      const timeMax = new Date(now.getTime() + (settings.maxAdvanceDays + 2) * 86400000);
+      const found = await getCallWindowsAndBusy(calendar.accessToken, calendar.calendarId, now, timeMax, (date) =>
+        zonedTimeToUtc(date, "00:00", settings.timeZone)
+      );
+      busyBlocks = found.busy;
+      openWindows = found.windows.length > 0 ? found.windows : undefined;
     }
   } catch (err) {
     console.error("Google Calendar unavailable while loading slots (continuing without it):", err);
     calendar = null;
     busyBlocks = [];
+    openWindows = undefined;
   }
 
-  const slots = getAvailableSlots({ settings, blockedDates, busyBlocks, now });
+  const slots = getAvailableSlots({ settings, blockedDates, busyBlocks, openWindows, now });
 
   return { slots, settings, calendarConnected: Boolean(calendar) };
 }
