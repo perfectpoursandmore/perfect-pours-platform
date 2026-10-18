@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { addStaffMember, toggleStaffActive, inviteStaffLogin } from "./actions";
 
 const ALL_ROLES = ["bartender", "server", "barback"];
@@ -7,7 +8,7 @@ const ALL_ROLES = ["bartender", "server", "barback"];
 export default async function StaffDirectoryPage({
   searchParams,
 }: {
-  searchParams: { error?: string };
+  searchParams: { error?: string; notice?: string };
 }) {
   const supabase = createClient();
 
@@ -15,6 +16,17 @@ export default async function StaffDirectoryPage({
     .from("staff")
     .select("id, first_name, last_name, roles, active, user_id, staff_details(email)")
     .order("first_name");
+
+  // Someone who was invited but never clicked their email link still has a
+  // login on file (user_id), but it's unconfirmed — so they get "Resend
+  // invite" instead of "Can log in", e.g. when their link expired.
+  const pendingUserIds = new Set<string>();
+  if (staff?.some((s) => s.user_id)) {
+    const { data } = await createAdminClient().auth.admin.listUsers({ perPage: 1000 });
+    for (const u of data?.users ?? []) {
+      if (!u.email_confirmed_at) pendingUserIds.add(u.id);
+    }
+  }
 
   return (
     <div style={{ display: "grid", gap: "1.5rem", maxWidth: 720 }}>
@@ -27,6 +39,7 @@ export default async function StaffDirectoryPage({
       </div>
 
       {searchParams.error && <p style={{ color: "var(--color-danger)" }}>{searchParams.error}</p>}
+      {searchParams.notice && <p style={{ color: "var(--color-accent)" }}>{searchParams.notice}</p>}
 
       <form action={addStaffMember} className="card" style={{ display: "grid", gap: "1rem" }}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
@@ -92,7 +105,7 @@ export default async function StaffDirectoryPage({
                     <td style={{ padding: "0.75rem 1rem" }}>{s.roles?.join(", ") || "—"}</td>
                     <td style={{ padding: "0.75rem 1rem" }}>{s.active ? "Active" : "Inactive"}</td>
                     <td style={{ padding: "0.75rem 1rem" }}>
-                      {s.user_id ? (
+                      {s.user_id && !pendingUserIds.has(s.user_id) ? (
                         <span style={{ color: "var(--color-text)" }}>✓ Can log in</span>
                       ) : email ? (
                         <form action={inviteStaffLogin}>
@@ -100,11 +113,16 @@ export default async function StaffDirectoryPage({
                           <input type="hidden" name="firstName" value={s.first_name} />
                           <input type="hidden" name="lastName" value={s.last_name} />
                           <input type="hidden" name="email" value={email} />
+                          {s.user_id && (
+                            <span style={{ color: "var(--color-muted)", fontSize: "0.85rem", display: "block" }}>
+                              Invited, hasn't joined yet
+                            </span>
+                          )}
                           <button
                             type="submit"
                             style={{ background: "none", border: "none", color: "var(--color-accent)", cursor: "pointer", padding: 0 }}
                           >
-                            Invite to log in
+                            {s.user_id ? "Resend invite" : "Invite to log in"}
                           </button>
                         </form>
                       ) : (
