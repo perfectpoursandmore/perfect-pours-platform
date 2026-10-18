@@ -54,6 +54,9 @@ export async function addStaffMember(formData: FormData) {
  * needing Node or database credentials. Requires an email on file for them
  * (from staff_details). Links the new login back to this staff row so the
  * staff calendar can bold "(you)" on their own assignments once they sign in.
+ * Also used as "Resend invite" for someone whose link expired before they
+ * joined: inviting an email that hasn't been confirmed yet just sends a
+ * fresh link to the same login.
  */
 export async function inviteStaffLogin(formData: FormData) {
   await requireAdmin();
@@ -86,6 +89,7 @@ export async function inviteStaffLogin(formData: FormData) {
   await supabase.from("staff").update({ user_id: data!.user.id }).eq("id", staffId);
 
   revalidatePath("/admin/staff");
+  redirect(`/admin/staff?notice=${encodeURIComponent(`Invite sent to ${email}.`)}`);
 }
 
 /**
