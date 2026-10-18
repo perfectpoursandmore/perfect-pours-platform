@@ -1,6 +1,15 @@
 import { addDaysToDateString, utcToZonedDateString, weekdayOf, zonedTimeToUtc } from "./timezone";
 
-export type DayHours = { start: string; end: string } | null;
+export type TimeRange = { start: string; end: string };
+
+/** One range, or several blocks in a day (e.g. 8-10am and 3:30-5:30pm). */
+export type DayHours = TimeRange | TimeRange[] | null;
+
+/** A day's bookable blocks, whichever shape they were saved in. */
+export function dayRanges(hours: DayHours | undefined): TimeRange[] {
+  if (!hours) return [];
+  return (Array.isArray(hours) ? hours : [hours]).filter((r) => r.start && r.end && r.start < r.end);
+}
 
 /** Keyed 0 (Sunday) .. 6 (Saturday). */
 export type WeeklyHours = Record<number, DayHours>;
@@ -105,13 +114,12 @@ export function getAvailableSlots(params: {
 
   for (let dayOffset = 0; dayOffset <= maxAdvanceDays; dayOffset++) {
     const dateStr = addDaysToDateString(todayLocal, dayOffset);
-    const hours = weeklyHours[weekdayOf(dateStr)];
-    if (!hours) continue;
-
-    addSlotsWithin(
-      zonedTimeToUtc(dateStr, hours.start, timeZone).getTime(),
-      zonedTimeToUtc(dateStr, hours.end, timeZone).getTime()
-    );
+    for (const range of dayRanges(weeklyHours[weekdayOf(dateStr)])) {
+      addSlotsWithin(
+        zonedTimeToUtc(dateStr, range.start, timeZone).getTime(),
+        zonedTimeToUtc(dateStr, range.end, timeZone).getTime()
+      );
+    }
   }
 
   return slots;

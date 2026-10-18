@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { saveConsultationSettings, addBlockedDate, removeBlockedDate } from "./actions";
+import { dayRanges, type DayHours } from "@/lib/scheduling/availability";
 
 const DAY_LABELS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -17,7 +18,7 @@ export default async function ConsultationSettingsPage() {
     .select("blocked_date, reason")
     .order("blocked_date");
 
-  const weeklyHours = settings?.weekly_hours ?? {};
+  const weeklyHours: Record<number, DayHours> = settings?.weekly_hours ?? {};
 
   return (
     <div style={{ display: "grid", gap: "2rem", maxWidth: 640 }}>
@@ -39,25 +40,39 @@ export default async function ConsultationSettingsPage() {
           </label>
         </div>
 
-        <div style={{ display: "grid", gap: "0.6rem" }}>
+        <div style={{ display: "grid", gap: "1rem" }}>
+          <p style={{ margin: 0, color: "var(--color-muted)", fontSize: "0.9rem" }}>
+            Each day can have up to 3 blocks of time, like 8:00 to 10:00 AM and 3:30 to 5:30 PM. Leave
+            a block empty if you don&apos;t need it.
+          </p>
           {DAY_LABELS.map((label, day) => {
-            const hours = weeklyHours[day];
+            const ranges = dayRanges(weeklyHours[day]);
             return (
-              <div
-                key={day}
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "auto 140px 100px 100px",
-                  gap: "0.75rem",
-                  alignItems: "center",
-                }}
-              >
-                <label style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                  <input type="checkbox" name={`day-${day}-enabled`} defaultChecked={Boolean(hours)} />
+              <div key={day} style={{ display: "grid", gap: "0.4rem" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontWeight: 600 }}>
+                  <input type="checkbox" name={`day-${day}-enabled`} defaultChecked={ranges.length > 0} />
                   {label}
                 </label>
-                <input type="time" name={`day-${day}-start`} defaultValue={hours?.start ?? "10:00"} />
-                <input type="time" name={`day-${day}-end`} defaultValue={hours?.end ?? "16:00"} />
+                {[0, 1, 2].map((i) => (
+                  <div
+                    key={i}
+                    style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.5rem", paddingLeft: "1.6rem" }}
+                  >
+                    <input
+                      type="time"
+                      name={`day-${day}-start-${i}`}
+                      defaultValue={ranges[i]?.start ?? (i === 0 && ranges.length === 0 ? "10:00" : "")}
+                      style={{ width: 130 }}
+                    />
+                    <span>to</span>
+                    <input
+                      type="time"
+                      name={`day-${day}-end-${i}`}
+                      defaultValue={ranges[i]?.end ?? (i === 0 && ranges.length === 0 ? "16:00" : "")}
+                      style={{ width: 130 }}
+                    />
+                  </div>
+                ))}
               </div>
             );
           })}
