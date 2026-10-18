@@ -19,12 +19,13 @@ export default async function StaffDirectoryPage({
 
   // Someone who was invited but never clicked their email link still has a
   // login on file (user_id), but it's unconfirmed — so they get "Resend
-  // invite" instead of "Can log in", e.g. when their link expired.
-  const pendingUserIds = new Set<string>();
+  // invite" instead of "Can log in", e.g. when their link expired. Same if
+  // their login was deleted in Supabase directly.
+  const joinedUserIds = new Set<string>();
   if (staff?.some((s) => s.user_id)) {
     const { data } = await createAdminClient().auth.admin.listUsers({ perPage: 1000 });
     for (const u of data?.users ?? []) {
-      if (!u.email_confirmed_at) pendingUserIds.add(u.id);
+      if (u.email_confirmed_at) joinedUserIds.add(u.id);
     }
   }
 
@@ -105,7 +106,7 @@ export default async function StaffDirectoryPage({
                     <td style={{ padding: "0.75rem 1rem" }}>{s.roles?.join(", ") || "—"}</td>
                     <td style={{ padding: "0.75rem 1rem" }}>{s.active ? "Active" : "Inactive"}</td>
                     <td style={{ padding: "0.75rem 1rem" }}>
-                      {s.user_id && !pendingUserIds.has(s.user_id) ? (
+                      {s.user_id && joinedUserIds.has(s.user_id) ? (
                         <span style={{ color: "var(--color-text)" }}>✓ Can log in</span>
                       ) : email ? (
                         <form action={inviteStaffLogin}>
