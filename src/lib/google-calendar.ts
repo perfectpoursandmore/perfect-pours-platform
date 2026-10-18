@@ -1,9 +1,9 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 
 // Server-only. Talks to Google's Calendar API directly over fetch — no
-// googleapis SDK dependency, just the two REST calls this app actually needs:
-// checking free/busy time and creating the consultation event on Faith's
-// calendar. Never import this from a Client Component.
+// googleapis SDK dependency, just the REST calls this app actually needs:
+// reading Faith's open call times and busy time, and creating the
+// consultation event on her calendar. Never import this from a Client Component.
 
 const GOOGLE_OAUTH_SCOPES = [
   "https://www.googleapis.com/auth/calendar.readonly",
@@ -161,54 +161,104 @@ async function getOwnedCalendarIds(accessToken: string, fallbackId: string): Pro
     const data = (await res.json()) as { items?: Array<{ id: string; deleted?: boolean }> };
     const ids = (data.items ?? []).filter((c) => !c.deleted).map((c) => c.id);
     if (!ids.includes(fallbackId) && fallbackId !== "primary") ids.push(fallbackId);
-    return ids.length > 0 ? ids.slice(0, 50) : [fallbackId]; // freeBusy accepts up to 50
+    return ids.length > 0 ? ids.slice(0, 50) : [fallbackId];
   } catch (err) {
     console.error("Couldn't list Google calendars, checking only the main one:", err);
     return [fallbackId];
   }
 }
 
-/**
- * Reads Faith's busy blocks in [timeMin, timeMax) across ALL of her own
- * calendars -- never event titles/details. Previously this only checked the
- * single connected calendar, so events on a second calendar (like a
- * separate business calendar) were invisible to the booking page.
- */
-export async function getBusyBlocks(
+/** Title Faith gives a Google Calendar event to open that time up for calls. */
+export const CALL_TIMES_TITLE = "Call times";
+
+function isCallTimesEvent(summary: string | undefined): boolean {
+  return Boolean(summary && summary.toLowerCase().includes(CALL_TIMES_TITLE.toLowerCase()));
+}
+
+type GoogleEvent = {
+  summary?: string;
+  status?: string;
+  transparency?: string;
+  start?: { dateTime?: string; date?: string };
+  end?: { dateTime?: string; date?: string };
+  attendees?: Array<{ self?: boolean; responseStatus?: string }>;
+};
+
+async function listEvents(
   accessToken: string,
   calendarId: string,
   timeMin: Date,
   timeMax: Date
-): Promise<BusyBlock[]> {
-  const calendarIds = await getOwnedCalendarIds(accessToken, calendarId);
-
-  const res = await fetch("https://www.googleapis.com/calendar/v3/freeBusy", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
+): Promise<GoogleEvent[]> {
+  const events: GoogleEvent[] = [];
+  let pageToken: string | undefined;
+  do {
+    const params = new URLSearchParams({
       timeMin: timeMin.toISOString(),
       timeMax: timeMax.toISOString(),
-      items: calendarIds.map((id) => ({ id })),
-    }),
-  });
+      singleEvents: "true",
+      maxResults: "2500",
+      fields: "nextPageToken,items(summary,status,transparency,start,end,attendees(self,responseStatus))",
+    });
+    if (pageToken) params.set("pageToken", pageToken);
+    const res = await fetch(
+      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?${params}`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    if (!res.ok) throw new Error(`Google events list failed for ${calendarId}: ${res.status} ${await res.text()}`);
+    const data = (await res.json()) as { items?: GoogleEvent[]; nextPageToken?: string };
+    events.push(...(data.items ?? []));
+    pageToken = data.nextPageToken;
+  } while (pageToken);
+  return events;
+}
 
-  if (!res.ok) {
-    throw new Error(`Google freeBusy query failed: ${res.status} ${await res.text()}`);
-  }
+/**
+ * Reads Faith's calendars for the booking page. Events titled "Call times"
+ * are the windows she's happy to take calls in; everything else she's
+ * attending (and hasn't marked "Free") is busy. Done with a plain event list
+ * rather than freeBusy, because freeBusy would count the "Call times" events
+ * themselves as busy and swallow the very windows they open up.
+ *
+ * `allDayToUtc` turns an all-day event's "YYYY-MM-DD" into a real instant in
+ * the business's time zone.
+ */
+export async function getCallWindowsAndBusy(
+  accessToken: string,
+  calendarId: string,
+  timeMin: Date,
+  timeMax: Date,
+  allDayToUtc: (date: string) => Date
+): Promise<{ windows: BusyBlock[]; busy: BusyBlock[] }> {
+  const calendarIds = await getOwnedCalendarIds(accessToken, calendarId);
+  const perCalendar = await Promise.all(
+    calendarIds.map((id) =>
+      listEvents(accessToken, id, timeMin, timeMax).catch((err) => {
+        // One unreadable calendar shouldn't hide every other one.
+        console.error(err);
+        return [] as GoogleEvent[];
+      })
+    )
+  );
 
-  const data = (await res.json()) as {
-    calendars?: Record<string, { busy?: Array<{ start: string; end: string }>; errors?: unknown[] }>;
-  };
-
+  const windows: BusyBlock[] = [];
   const busy: BusyBlock[] = [];
-  for (const [id, cal] of Object.entries(data.calendars ?? {})) {
-    if (cal.errors?.length) console.error(`freeBusy error for calendar ${id}:`, cal.errors);
-    for (const b of cal.busy ?? []) busy.push({ start: new Date(b.start), end: new Date(b.end) });
+  for (const event of perCalendar.flat()) {
+    if (event.status === "cancelled") continue;
+    const startRaw = event.start?.dateTime ?? (event.start?.date ? allDayToUtc(event.start.date) : null);
+    const endRaw = event.end?.dateTime ?? (event.end?.date ? allDayToUtc(event.end.date) : null);
+    if (!startRaw || !endRaw) continue;
+    const block = { start: new Date(startRaw), end: new Date(endRaw) };
+
+    if (isCallTimesEvent(event.summary)) {
+      windows.push(block);
+      continue;
+    }
+    if (event.transparency === "transparent") continue; // marked "Free"
+    if (event.attendees?.some((a) => a.self && a.responseStatus === "declined")) continue;
+    busy.push(block);
   }
-  return busy;
+  return { windows, busy };
 }
 
 /** Creates the consultation call on Faith's calendar so it becomes a busy block too. */
@@ -220,9 +270,10 @@ export async function createConsultationEvent(params: {
   timeZone: string;
   clientName: string;
   clientEmail: string;
+  clientPhone?: string;
   eventType: string;
 }): Promise<{ id: string; htmlLink: string }> {
-  const { accessToken, calendarId, start, end, timeZone, clientName, clientEmail, eventType } =
+  const { accessToken, calendarId, start, end, timeZone, clientName, clientEmail, clientPhone, eventType } =
     params;
 
   const res = await fetch(
@@ -235,7 +286,9 @@ export async function createConsultationEvent(params: {
       },
       body: JSON.stringify({
         summary: `Consultation: ${clientName} (${eventType})`,
-        description: `Booked through the Perfect Pours & More consultation scheduler.\nClient email: ${clientEmail}`,
+        description: `Booked through the Perfect Pours & More consultation scheduler.\nClient email: ${clientEmail}${
+          clientPhone ? `\nClient phone: ${clientPhone}` : ""
+        }`,
         start: { dateTime: start.toISOString(), timeZone },
         end: { dateTime: end.toISOString(), timeZone },
       }),

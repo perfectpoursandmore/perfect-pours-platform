@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { CSSProperties, FormEvent } from "react";
 import { DISHWARE, SERVICES, SERVICE_STYLES, type Option } from "@/lib/event-details";
+import { CallTimePicker, type PickedCall } from "./CallTimePicker";
 
 const EVENT_TYPES: Option[] = [
   { value: "wedding", label: "Wedding" },
@@ -35,14 +36,18 @@ export function InquiryForm() {
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
   const [eventType, setEventType] = useState("");
+  // Step one is picking a call time; the questions come after.
+  const [call, setCall] = useState<PickedCall | null>(null);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (!call) return;
     setSubmitting(true);
     setError(null);
 
     const fd = new FormData(e.currentTarget);
     const payload = {
+      slotStart: call.start,
       firstName: fd.get("firstName"),
       lastName: fd.get("lastName"),
       email: fd.get("email"),
@@ -81,6 +86,8 @@ export function InquiryForm() {
       if (!res.ok) {
         setError(json.error ?? "Something went wrong. Please try again.");
         setSubmitting(false);
+        // Someone else just took that time: send them back to pick another.
+        if (res.status === 409) setCall(null);
         return;
       }
       setDone(String(payload.firstName ?? ""));
@@ -94,107 +101,143 @@ export function InquiryForm() {
   if (done !== null) {
     return (
       <div className="card" style={{ maxWidth: 560 }}>
-        <h2 style={{ marginTop: 0 }}>Thank you{done ? `, ${done}` : ""}!</h2>
+        <h2 style={{ marginTop: 0 }}>You&apos;re all set{done ? `, ${done}` : ""}!</h2>
+        <p>
+          Your call is booked for <strong>{call?.label}</strong> (Eastern Time). We&apos;ll call you at the
+          number you gave us.
+        </p>
         <p style={{ marginBottom: 0 }}>
-          We&apos;ve got your event details and will email you pricing within 24-48 hours. Keep an
-          eye on your inbox (and your spam folder, just in case).
+          After we chat, we&apos;ll send your personalized quote. A confirmation is on its way to your inbox
+          (check your spam folder, just in case).
         </p>
       </div>
     );
   }
 
   return (
-    <form onSubmit={handleSubmit} className="card" style={{ maxWidth: 600, display: "grid", gap: "1.25rem" }}>
-      {/* Honeypot: hidden from people, irresistible to spam bots. */}
-      <div aria-hidden="true" style={{ position: "absolute", left: "-10000px", width: 1, height: 1, overflow: "hidden" }}>
-        <label htmlFor="company">Company</label>
-        <input id="company" name="company" tabIndex={-1} autoComplete="off" />
+    <div style={{ maxWidth: 600, display: "grid", gap: "1.25rem" }}>
+      {/* Kept mounted (just hidden) so going back to change the time never
+          wipes anything they've already typed below. */}
+      <div hidden={Boolean(call)}>
+        <h2 style={{ margin: "0 0 0.75rem", fontSize: "1.15rem" }}>Step 1: Pick a time for a quick 15-minute call</h2>
+        <CallTimePicker
+          onPick={(picked) => {
+            setCall(picked);
+            setError(null);
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          }}
+        />
       </div>
+      <form
+        onSubmit={handleSubmit}
+        className="card"
+        style={{ display: call ? "grid" : "none", gap: "1.25rem" }}
+      >
+        <div>
+          <p style={{ margin: 0, fontWeight: 700, fontSize: "1.05rem" }}>Your call: {call?.label}</p>
+          <button
+            type="button"
+            onClick={() => setCall(null)}
+            style={{ background: "none", border: "none", color: "var(--color-text)", cursor: "pointer", padding: 0, textDecoration: "underline" }}
+          >
+            Choose a different time
+          </button>
+          <p style={{ margin: "0.75rem 0 0", color: "var(--color-muted)" }}>
+            Step 2: Tell us about your event so we can come to the call prepared.
+          </p>
+        </div>
 
-      <Section title="About you">
-        <Row>
-          <Field label="First name" name="firstName" required autoComplete="given-name" />
-          <Field label="Last name" name="lastName" required autoComplete="family-name" />
-        </Row>
-        <Field label="Email" name="email" type="email" required autoComplete="email" />
-        <Field label="Phone" name="phone" type="tel" required autoComplete="tel" />
-      </Section>
+        {/* Honeypot: hidden from people, irresistible to spam bots. */}
+        <div aria-hidden="true" style={{ position: "absolute", left: "-10000px", width: 1, height: 1, overflow: "hidden" }}>
+          <label htmlFor="company">Company</label>
+          <input id="company" name="company" tabIndex={-1} autoComplete="off" />
+        </div>
 
-      <Section title="Your event">
-        <Row>
+        <Section title="About you">
+          <Row>
+            <Field label="First name" name="firstName" required autoComplete="given-name" />
+            <Field label="Last name" name="lastName" required autoComplete="family-name" />
+          </Row>
+          <Field label="Email" name="email" type="email" required autoComplete="email" />
+          <Field label="Phone" name="phone" type="tel" required autoComplete="tel" />
+        </Section>
+
+        <Section title="Your event">
+          <Row>
+            <div>
+              <label htmlFor="eventType">Event type</label>
+              <select
+                id="eventType"
+                name="eventType"
+                required
+                value={eventType}
+                onChange={(e) => setEventType(e.target.value)}
+                style={selectStyle}
+              >
+                <option value="" disabled>
+                  Select one
+                </option>
+                {EVENT_TYPES.map((t) => (
+                  <option key={t.value} value={t.value}>
+                    {t.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <Field label="Event date" name="eventDate" type="date" required />
+          </Row>
+          {eventType === "other" && (
+            <Field label="What kind of event?" name="eventTypeOther" required placeholder="e.g. Retirement party" />
+          )}
+          <Row>
+            <Field label="Guest arrival time" name="guestArrivalTime" type="time" required />
+            <Field label="Estimated guest count" name="guestCount" type="number" min={1} required />
+          </Row>
+          <Field label="Street address" name="addressLine" autoComplete="street-address" />
+          <Row cols="2fr 1fr 1fr">
+            <Field label="Town/City" name="city" required autoComplete="address-level2" />
+            <Field label="State" name="state" defaultValue="NY" autoComplete="address-level1" />
+            <Field label="ZIP" name="zip" autoComplete="postal-code" />
+          </Row>
+        </Section>
+
+        <Section title="What services are you interested in?" hint="Check all that apply.">
+          <CheckList name="services" options={SERVICES} />
+        </Section>
+
+        <Section title="Food Service Style" hint="This helps us figure out the right amount of staff for you.">
+          <RadioList name="serviceStyle" options={SERVICE_STYLES} />
           <div>
-            <label htmlFor="eventType">Event type</label>
-            <select
-              id="eventType"
-              name="eventType"
-              required
-              value={eventType}
-              onChange={(e) => setEventType(e.target.value)}
-              style={selectStyle}
-            >
-              <option value="" disabled>
-                Select one
-              </option>
-              {EVENT_TYPES.map((t) => (
-                <option key={t.value} value={t.value}>
-                  {t.label}
+            <p style={{ margin: "0.5rem 0 0.4rem", fontWeight: 600, fontSize: "0.95rem" }}>Which will you be using?</p>
+            <RadioList name="dishware" options={DISHWARE} />
+          </div>
+        </Section>
+
+        <Section title="Almost done">
+          <div>
+            <label htmlFor="howHeard">How did you hear about us?</label>
+            <select id="howHeard" name="howHeard" defaultValue="" style={selectStyle}>
+              <option value="">Select one</option>
+              {HOW_HEARD_OPTIONS.map((o) => (
+                <option key={o} value={o}>
+                  {o}
                 </option>
               ))}
             </select>
           </div>
-          <Field label="Event date" name="eventDate" type="date" required />
-        </Row>
-        {eventType === "other" && (
-          <Field label="What kind of event?" name="eventTypeOther" required placeholder="e.g. Retirement party" />
-        )}
-        <Row>
-          <Field label="Guest arrival time" name="guestArrivalTime" type="time" required />
-          <Field label="Estimated guest count" name="guestCount" type="number" min={1} required />
-        </Row>
-        <Field label="Street address" name="addressLine" autoComplete="street-address" />
-        <Row cols="2fr 1fr 1fr">
-          <Field label="Town/City" name="city" required autoComplete="address-level2" />
-          <Field label="State" name="state" defaultValue="NY" autoComplete="address-level1" />
-          <Field label="ZIP" name="zip" autoComplete="postal-code" />
-        </Row>
-      </Section>
+          <div>
+            <label htmlFor="message">Anything else we should know? (optional)</label>
+            <textarea id="message" name="message" rows={4} style={textareaStyle} />
+          </div>
+        </Section>
 
-      <Section title="What services are you interested in?" hint="Check all that apply.">
-        <CheckList name="services" options={SERVICES} />
-      </Section>
+        {error && <p style={{ color: "var(--color-danger)", margin: 0 }}>{error}</p>}
 
-      <Section title="Food Service Style" hint="This helps us figure out the right amount of staff for you.">
-        <RadioList name="serviceStyle" options={SERVICE_STYLES} />
-        <div>
-          <p style={{ margin: "0.5rem 0 0.4rem", fontWeight: 600, fontSize: "0.95rem" }}>Which will you be using?</p>
-          <RadioList name="dishware" options={DISHWARE} />
-        </div>
-      </Section>
-
-      <Section title="Almost done">
-        <div>
-          <label htmlFor="howHeard">How did you hear about us?</label>
-          <select id="howHeard" name="howHeard" defaultValue="" style={selectStyle}>
-            <option value="">Select one</option>
-            {HOW_HEARD_OPTIONS.map((o) => (
-              <option key={o} value={o}>
-                {o}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label htmlFor="message">Anything else we should know? (optional)</label>
-          <textarea id="message" name="message" rows={4} style={textareaStyle} />
-        </div>
-      </Section>
-
-      {error && <p style={{ color: "var(--color-danger)", margin: 0 }}>{error}</p>}
-
-      <button type="submit" className="button" disabled={submitting} style={{ justifySelf: "start" }}>
-        {submitting ? "Sending…" : "Get my pricing"}
-      </button>
-    </form>
+        <button type="submit" className="button" disabled={submitting} style={{ justifySelf: "start" }}>
+          {submitting ? "Booking…" : "Book my call"}
+        </button>
+      </form>
+    </div>
   );
 }
 
