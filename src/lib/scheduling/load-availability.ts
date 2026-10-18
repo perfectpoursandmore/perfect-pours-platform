@@ -53,9 +53,10 @@ export async function loadAvailableSlots(now: Date = new Date()): Promise<{
   // consultation event in the booking route itself.
   let calendar: { accessToken: string; calendarId: string } | null = null;
   //
-  // While Google is connected, Faith picks her call times right on her
-  // calendar: only time inside events titled "Call times" is offered, and
-  // the weekly hours are just the fallback for when it isn't connected.
+  // Faith can also open up one-off call times right on her calendar: if she
+  // has any events titled "Call times", only time inside them is offered.
+  // Otherwise the weekly hours from settings apply. Either way, anything
+  // else on her calendar blocks the time.
   let busyBlocks: Slot[] = [];
   let openWindows: Slot[] | undefined;
   try {
@@ -66,7 +67,7 @@ export async function loadAvailableSlots(now: Date = new Date()): Promise<{
         zonedTimeToUtc(date, "00:00", settings.timeZone)
       );
       busyBlocks = found.busy;
-      openWindows = found.windows;
+      openWindows = found.windows.length > 0 ? found.windows : undefined;
     }
   } catch (err) {
     console.error("Google Calendar unavailable while loading slots (continuing without it):", err);

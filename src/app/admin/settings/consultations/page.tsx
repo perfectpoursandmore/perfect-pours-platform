@@ -24,10 +24,10 @@ export default async function ConsultationSettingsPage() {
       <div>
         <h1 style={{ margin: 0 }}>Consultation availability</h1>
         <p style={{ color: "var(--color-muted)" }}>
-          To choose when people can book a call, add an event called <strong>Call times</strong> to
-          your Google Calendar covering the hours you&apos;re happy to take calls. Clients can only
-          pick times inside those events, and anything else on your calendar in that window is
-          skipped. The weekly hours below are only used if Google Calendar gets disconnected.
+          Clients can book a call during the weekly hours below. Anything already on your Google
+          Calendar blocks that time automatically. If you&apos;d rather pick hours week by week, add
+          events called <strong>Call times</strong> to your Google Calendar instead: while any exist,
+          clients can only book inside them.
         </p>
       </div>
 
