@@ -14,7 +14,6 @@ import {
   SERVICE_STYLES,
   cleanValue,
   cleanValues,
-  labelFor,
   labelsFor,
 } from "@/lib/event-details";
 
@@ -256,8 +255,6 @@ ${conflictNote}
 <li><strong>Where:</strong> ${esc([venueName, addressLine, city, state].filter(Boolean).join(", "))}</li>
 <li><strong>Guests:</strong> ${guestCount}</li>
 <li><strong>Interested in:</strong> ${esc(labelsFor(SERVICES, services))}</li>
-<li><strong>Food service:</strong> ${esc(labelFor(SERVICE_STYLES, serviceStyle))}</li>
-<li><strong>Dishware:</strong> ${esc(labelFor(DISHWARE, dishware))}</li>
 <li><strong>How they heard about us:</strong> ${esc(howHeard ?? "—")}</li>
 </ul>
 ${message ? `<p><strong>Their note:</strong><br>${esc(message).replace(/\n/g, "<br>")}</p>` : ""}
