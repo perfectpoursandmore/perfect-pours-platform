@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { CSSProperties, FormEvent } from "react";
-import { DISHWARE, SERVICES, SERVICE_STYLES, type Option } from "@/lib/event-details";
+import { SERVICES, type Option } from "@/lib/event-details";
 import { CallTimePicker, type PickedCall } from "./CallTimePicker";
 
 const EVENT_TYPES: Option[] = [
@@ -63,8 +63,6 @@ export function InquiryForm() {
       zip: fd.get("zip"),
       guestCount: fd.get("guestCount"),
       services: fd.getAll("services"),
-      serviceStyle: fd.get("serviceStyle"),
-      dishware: fd.get("dishware"),
       howHeard: fd.get("howHeard"),
       message: fd.get("message"),
       company: fd.get("company"),
@@ -205,14 +203,6 @@ export function InquiryForm() {
           <CheckList name="services" options={SERVICES} />
         </Section>
 
-        <Section title="Food Service Style" hint="This helps us figure out the right amount of staff for you.">
-          <RadioList name="serviceStyle" options={SERVICE_STYLES} />
-          <div>
-            <p style={{ margin: "0.5rem 0 0.4rem", fontWeight: 600, fontSize: "0.95rem" }}>Which will you be using?</p>
-            <RadioList name="dishware" options={DISHWARE} />
-          </div>
-        </Section>
-
         <Section title="Almost done">
           <div>
             <label htmlFor="howHeard">How did you hear about us?</label>
@@ -278,19 +268,6 @@ function CheckList({ name, options }: { name: string; options: Option[] }) {
             {o.label}
             {o.hint && <span style={{ display: "block", color: "var(--color-muted)", fontSize: "0.85rem" }}>{o.hint}</span>}
           </span>
-        </label>
-      ))}
-    </div>
-  );
-}
-
-function RadioList({ name, options }: { name: string; options: Option[] }) {
-  return (
-    <div style={{ display: "grid", gap: "0.5rem" }}>
-      {options.map((o) => (
-        <label key={o.value} style={choiceStyle}>
-          <input type="radio" name={name} value={o.value} style={{ width: "auto", marginTop: 3 }} />
-          <span>{o.label}</span>
         </label>
       ))}
     </div>
