@@ -311,58 +311,114 @@ export async function fillInCustomerDetails(
   });
 }
 
+/** One line on the invoice (server, bartender, gratuity, fee, tax...). */
+export type InvoiceLine = {
+  description: string;
+  amount: number; // negative for a discount
+  quantity?: number; // shown with unitPrice only when quantity x unitPrice = amount
+  unitPrice?: number;
+};
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+function toQboLine(l: InvoiceLine, serviceDate: string | null) {
+  if (l.amount < 0) {
+    return {
+      Amount: round2(-l.amount),
+      DetailType: "DiscountLineDetail",
+      Description: l.description,
+      DiscountLineDetail: { PercentBased: false },
+    };
+  }
+  const showQty =
+    l.quantity != null && l.unitPrice != null && l.quantity > 0 && round2(l.quantity * l.unitPrice) === round2(l.amount);
+  return {
+    Amount: round2(l.amount),
+    DetailType: "SalesItemLineDetail",
+    Description: l.description,
+    SalesItemLineDetail: {
+      // "1" is QuickBooks' universal default service/product item id —
+      // present in every QBO company unless it's been deleted. Faith
+      // can repoint this to a specific catalog item later if she wants
+      // invoices to land on a distinct income account.
+      ItemRef: { value: "1" },
+      ...(showQty ? { Qty: l.quantity, UnitPrice: l.unitPrice } : {}),
+      ...(serviceDate ? { ServiceDate: serviceDate } : {}),
+    },
+  };
+}
+
 /**
- * Creates a QuickBooks Invoice for the event's full total against Faith's
- * default "Services" income account/item — see README for the one-time
- * step of confirming that item exists in her QuickBooks company
- * (QuickBooks always has at least one default service item available, so
- * this works out of the box for most accounts). An optional `memo` becomes
- * the invoice's CustomerMemo, which shows right on the invoice the client
- * sees -- used to ask for a specific retainer amount up front, since
- * QuickBooks Payments lets the client type in whatever amount they want to
- * pay rather than this app having to split it into a separate invoice.
+ * The next invoice number after the highest numeric one already in
+ * QuickBooks (e.g. 1047 -> "1048"). Used only if QuickBooks didn't number
+ * the invoice itself.
+ */
+async function nextInvoiceNumber(conn: QboConnection): Promise<string | null> {
+  const query = "select DocNumber from Invoice orderby MetaData.CreateTime desc maxresults 50";
+  const result = await qboFetch(conn, `/query?query=${encodeURIComponent(query)}`);
+  const invoices = (result.QueryResponse as { Invoice?: Array<{ DocNumber?: string }> } | undefined)?.Invoice ?? [];
+  const numbers = invoices.map((i) => Number(i.DocNumber)).filter((n) => Number.isInteger(n) && n > 0);
+  if (numbers.length === 0) return "1001"; // QuickBooks' own starting number
+  return String(Math.max(...numbers) + 1);
+}
+
+/**
+ * Creates a QuickBooks Invoice, one line per charge from the Quote
+ * (server, bartender, gratuity, fee, tax...), against Faith's default
+ * "Services" item. No shipping address is sent. The invoice number follows
+ * QuickBooks' own numbering, so it lines up with invoices Faith makes by
+ * hand there. An optional `memo` becomes the invoice's CustomerMemo, which
+ * shows right on the invoice the client sees -- used to ask for a specific
+ * retainer amount up front, since QuickBooks Payments lets the client type
+ * in whatever amount they want to pay rather than this app having to split
+ * it into a separate invoice.
  */
 export async function createInvoice(
   conn: QboConnection,
   params: {
     customerId: string;
-    description: string;
-    amount: number;
+    lines: InvoiceLine[];
+    serviceDate?: string | null; // YYYY-MM-DD, the event date
     memo?: string;
     billEmail?: string | null; // so "Send" in QuickBooks already has their email
     billAddress?: QboAddress | null; // the client's address
-    eventAddress?: QboAddress | null; // where the event is, as the invoice's shipping/service address
   }
-): Promise<{ id: string }> {
+): Promise<{ id: string; docNumber: string | null }> {
   const billAddr = qboAddr(params.billAddress);
-  const shipAddr = qboAddr(params.eventAddress);
+  const serviceDate = params.serviceDate ? params.serviceDate.slice(0, 10) : null;
   const created = await qboFetch(conn, "/invoice", {
     method: "POST",
     body: JSON.stringify({
       CustomerRef: { value: params.customerId },
+      // Ask QuickBooks to fill in the next invoice number in its sequence.
+      // (Needed when "Custom transaction numbers" is on in QuickBooks;
+      // otherwise QuickBooks numbers it anyway.)
+      AutoDocNumber: true,
       ...(params.billEmail ? { BillEmail: { Address: params.billEmail } } : {}),
       ...(billAddr ? { BillAddr: billAddr } : {}),
-      ...(shipAddr ? { ShipAddr: shipAddr } : {}),
       ...(params.memo ? { CustomerMemo: { value: params.memo } } : {}),
-      Line: [
-        {
-          Amount: params.amount,
-          DetailType: "SalesItemLineDetail",
-          Description: params.description,
-          SalesItemLineDetail: {
-            // "1" is QuickBooks' universal default service/product item id —
-            // present in every QBO company unless it's been deleted. Faith
-            // can repoint this to a specific catalog item later if she wants
-            // invoices to land on a distinct income account.
-            ItemRef: { value: "1" },
-          },
-        },
-      ],
+      Line: params.lines.map((l) => toQboLine(l, serviceDate)),
     }),
   });
 
-  const invoice = created.Invoice as { Id: string };
-  return { id: invoice.Id };
+  const invoice = created.Invoice as { Id: string; SyncToken: string; DocNumber?: string };
+  if (invoice.DocNumber) return { id: invoice.Id, docNumber: invoice.DocNumber };
+
+  // QuickBooks left the number blank: fill in the next one ourselves. The
+  // invoice already exists, so a failure here just leaves it unnumbered.
+  try {
+    const docNumber = await nextInvoiceNumber(conn);
+    if (docNumber) {
+      await qboFetch(conn, "/invoice", {
+        method: "POST",
+        body: JSON.stringify({ Id: invoice.Id, SyncToken: invoice.SyncToken, sparse: true, DocNumber: docNumber }),
+      });
+    }
+    return { id: invoice.Id, docNumber };
+  } catch (err) {
+    console.error("Couldn't number the QuickBooks invoice:", err);
+    return { id: invoice.Id, docNumber: null };
+  }
 }
 
 /**
