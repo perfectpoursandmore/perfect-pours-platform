@@ -9,6 +9,7 @@ import { recomputeProposalTotals } from "@/lib/proposal-totals";
 import { renderContractBody } from "@/lib/contracts";
 import { EVENT_TYPE_LABELS, formatMoney, formatDate, linePrice } from "@/lib/labels";
 import { upsertEventFinancials, maybeMarkEventBooked } from "@/lib/event-financials";
+import { invoiceLinesFromQuote } from "@/lib/invoice-lines";
 import {
   getValidConnection,
   findOrCreateCustomer,
@@ -377,7 +378,7 @@ async function createDraftInvoiceForEvent(
 ): Promise<string | null> {
   const loaded = await loadEventAndClientForInvoicing(supabase, eventId);
   const [{ data: proposal }, { data: financials }] = await Promise.all([
-    supabase.from("proposals").select("total_amount, deposit_amount").eq("event_id", eventId).order("created_at", { ascending: false }).limit(1).maybeSingle(),
+    supabase.from("proposals").select("*").eq("event_id", eventId).order("created_at", { ascending: false }).limit(1).maybeSingle(),
     supabase.from("event_financials").select("total_amount, deposit_amount").eq("event_id", eventId).maybeSingle(),
   ]);
 
@@ -395,7 +396,7 @@ async function createDraftInvoiceForEvent(
   try {
     // Everything the app already knows goes to QuickBooks, so nothing is
     // retyped there: billing = their home address (or the event's, if no
-    // home address is saved); the event location goes on as the service address.
+    // home address is saved). No shipping address goes on the invoice.
     const c = loaded.client;
     const e = loaded.event;
     const eventAddress: QboAddress | null = e.address_line ? { line1: e.address_line, city: e.city, state: e.state, zip: e.zip } : null;
@@ -425,14 +426,25 @@ async function createDraftInvoiceForEvent(
         ? `A retainer of ${formatMoney(depositAmount)} is due now to confirm this booking, with the remaining balance due before the event. Enter the amount you'd like to pay now at checkout.`
         : undefined;
 
+    // One line per charge from the Quote (server, bartender, gratuity, fee,
+    // tax...). If there's no Quote, or it doesn't add up to the amount being
+    // invoiced, fall back to a single line for the total.
+    const { data: quoteItems } = proposal && quoteTotal > 0
+      ? await supabase.from("proposal_items").select("*").eq("proposal_id", proposal.id)
+      : { data: null };
+    const summary = `${loaded.event.name}${loaded.event.event_date ? ` (${formatDate(loaded.event.event_date)})` : ""}`;
+    const lines =
+      (proposal && quoteTotal > 0 && invoiceLinesFromQuote(proposal, quoteItems ?? [])) || [
+        { description: summary, amount },
+      ];
+
     const invoice = await createInvoice(conn, {
       customerId: qboCustomerId,
-      description: `${loaded.event.name}${loaded.event.event_date ? ` (${formatDate(loaded.event.event_date)})` : ""}`,
-      amount,
+      lines,
+      serviceDate: loaded.event.event_date ?? null,
       memo,
       billEmail: c.email,
       billAddress,
-      eventAddress,
     });
 
     await upsertEventFinancials(supabase, eventId, {
