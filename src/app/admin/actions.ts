@@ -99,7 +99,26 @@ export async function removeTodo(formData: FormData) {
 export async function addInboxText(formData: FormData) {
   await requireAdmin();
   const supabase = createClient();
-  await addInboxItem(supabase, String(formData.get("text") ?? ""));
+  await addInboxItem(supabase, String(formData.get("text") ?? ""), "", String(formData.get("note") ?? ""));
+  revalidatePath("/admin");
+}
+
+/** Saves the short note Faith types next to an inbox item ("send an invoice"). */
+export async function saveInboxNote(formData: FormData) {
+  await requireAdmin();
+  const supabase = createClient();
+  const id = String(formData.get("id") ?? "");
+  const note = String(formData.get("note") ?? "").trim().slice(0, 500);
+  await supabase.from("inbox_items").update({ note: note || null }).eq("id", id);
+  revalidatePath("/admin");
+}
+
+/** One-tap delete -- for test items, or anything she's already handled. */
+export async function removeInboxItem(formData: FormData) {
+  await requireAdmin();
+  const supabase = createClient();
+  const id = String(formData.get("id") ?? "");
+  await supabase.from("inbox_items").delete().eq("id", id);
   revalidatePath("/admin");
 }
 
@@ -154,7 +173,7 @@ export async function handleInboxItem(formData: FormData) {
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    await supabase.from("todos").insert({ list_type: "daily", item: item.body, created_by: user?.id ?? null });
+    await supabase.from("todos").insert({ list_type: "daily", item: item.note ? `${item.note}: ${item.body}` : item.body, created_by: user?.id ?? null });
     await supabase.from("inbox_items").delete().eq("id", id);
   }
 
