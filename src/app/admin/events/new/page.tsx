@@ -6,7 +6,7 @@ import { EventAddressFields } from "./EventAddressFields";
 export default async function NewEventPage({
   searchParams,
 }: {
-  searchParams: { error?: string; clientId?: string };
+  searchParams: { error?: string; clientId?: string; eventDate?: string; inboxId?: string };
 }) {
   const supabase = createClient();
   const { data: allClients } = await supabase
@@ -28,6 +28,7 @@ export default async function NewEventPage({
       {searchParams.error && <p style={{ color: "var(--color-danger)" }}>{searchParams.error}</p>}
 
       <form action={createEventDirect} className="card" style={{ display: "grid", gap: "1rem" }}>
+        {searchParams.inboxId && <input type="hidden" name="inboxId" value={searchParams.inboxId} />}
         <div>
           <label htmlFor="clientId">Client</label>
           <select
@@ -114,7 +115,7 @@ export default async function NewEventPage({
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
           <div>
             <label htmlFor="eventDate">Event date</label>
-            <input id="eventDate" name="eventDate" type="date" required />
+            <input id="eventDate" name="eventDate" type="date" required defaultValue={searchParams.eventDate ?? ""} />
           </div>
           <div>
             <label htmlFor="guestCount">Guest count</label>

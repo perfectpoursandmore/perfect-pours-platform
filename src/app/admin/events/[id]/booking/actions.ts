@@ -421,10 +421,35 @@ async function createDraftInvoiceForEvent(
       }
     }
 
-    const memo =
+    const retainerNote =
       depositAmount > 0
         ? `A retainer of ${formatMoney(depositAmount)} is due now to confirm this booking, with the remaining balance due before the event. Enter the amount you'd like to pay now at checkout.`
-        : undefined;
+        : "";
+
+    // If there's a contract they haven't signed yet, put its link right on
+    // the invoice -- so sending the invoice from QuickBooks sends the
+    // contract too, instead of being a second thing to remember.
+    const { data: contract } = await supabase
+      .from("contracts")
+      .select("status")
+      .eq("event_id", eventId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "");
+    const contractNote =
+      contract && contract.status !== "signed" && appUrl && e.documents_token
+        ? `Please review and sign your contract here: ${appUrl}/client/${e.documents_token}`
+        : "";
+    if (contractNote && contract!.status === "unsent") {
+      await supabase
+        .from("contracts")
+        .update({ status: "sent", sent_at: new Date().toISOString() })
+        .eq("event_id", eventId)
+        .eq("status", "unsent");
+    }
+
+    const memo = [contractNote, retainerNote].filter(Boolean).join("\n\n").slice(0, 1000) || undefined;
 
     // One line per charge from the Quote (server, bartender, gratuity, fee,
     // tax...). If there's no Quote, or it doesn't add up to the amount being

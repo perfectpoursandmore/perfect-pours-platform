@@ -220,6 +220,13 @@ export async function createEventDirect(formData: FormData) {
 
   await syncEventToGoogle(event!.id);
 
+  // Came from a text in the dashboard inbox: that text is handled now.
+  const inboxId = String(formData.get("inboxId") ?? "");
+  if (inboxId) {
+    await supabase.from("inbox_items").delete().eq("id", inboxId);
+    revalidatePath("/admin");
+  }
+
   revalidatePath("/admin/events");
   revalidatePath("/admin/clients");
   revalidatePath("/staff");

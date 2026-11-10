@@ -21,6 +21,12 @@ export default function SettingsIndexPage() {
             Connect the company used for deposit/balance invoices
           </div>
         </a>
+        <a className="card" href="/admin/settings/text-inbox" style={{ textDecoration: "none", color: "inherit" }}>
+          <strong>Text inbox (iPhone)</strong>
+          <div style={{ color: "var(--color-muted)", fontSize: "0.9rem" }}>
+            Set up the one-tap button that sends client texts here
+          </div>
+        </a>
         <a className="card" href="/admin/settings/email" style={{ textDecoration: "none", color: "inherit" }}>
           <strong>Email</strong>
           <div style={{ color: "var(--color-muted)", fontSize: "0.9rem" }}>

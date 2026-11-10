@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { LEAD_STATUS_LABELS, formatDate, formatDateTime } from "@/lib/labels";
 import { customQuoteReason, getPriceList } from "@/lib/price-list";
-import { addDashboardNote, removeDashboardNote, addTodo, toggleTodo, removeTodo } from "./actions";
+import { addDashboardNote, removeDashboardNote, addTodo, toggleTodo, removeTodo, addInboxText, handleInboxItem } from "./actions";
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
@@ -46,7 +46,7 @@ type TodoRow = {
   created_at: string;
 };
 
-export default async function AdminDashboardPage() {
+export default async function AdminDashboardPage({ searchParams }: { searchParams: { inboxError?: string } }) {
   const supabase = createClient();
   const priceList = await getPriceList(supabase);
 
@@ -57,6 +57,8 @@ export default async function AdminDashboardPage() {
     { data: dashboardNotes },
     { data: todos },
     { data: openHolds },
+    { data: inboxItems },
+    { data: clientList },
   ] = await Promise.all([
       supabase
         .from("events")
@@ -92,6 +94,8 @@ export default async function AdminDashboardPage() {
         .in("status", ["inquiry", "booked"])
         .gte("event_date", todayISO())
         .order("event_date"),
+      supabase.from("inbox_items").select("id, body, kind, guessed_date, client_id, created_at").order("created_at"),
+      supabase.from("clients").select("id, first_name, last_name").order("first_name"),
     ]);
 
   // Every HOLD still waiting on something: either pricing hasn't gone out
@@ -127,6 +131,12 @@ export default async function AdminDashboardPage() {
   return (
     <div style={{ display: "grid", gap: "1.5rem" }}>
       <h1 style={{ margin: 0 }}>Dashboard</h1>
+
+      <InboxCard
+        items={(inboxItems ?? []) as InboxRow[]}
+        clients={(clientList ?? []) as ClientOption[]}
+        error={searchParams?.inboxError}
+      />
 
       <div className="card" style={{ borderColor: needsPricing.length + needsCheckIn.length + addonRequests.length > 0 ? "var(--color-accent)" : undefined }}>
         <h2 style={{ marginTop: 0, fontSize: "1rem" }}>Needs follow-up</h2>
@@ -399,6 +409,102 @@ function TodoListCard({
             border: "1px solid var(--color-border)",
             fontSize: "0.9rem",
           }}
+        />
+        <button type="submit" className="button">
+          Add
+        </button>
+      </form>
+    </div>
+  );
+}
+
+type InboxRow = {
+  id: string;
+  body: string;
+  kind: "booking" | "send" | "todo";
+  guessed_date: string | null;
+  client_id: string | null;
+  created_at: string;
+};
+
+type ClientOption = { id: string; first_name: string; last_name: string | null };
+
+const KIND_LABELS: Record<InboxRow["kind"], string> = {
+  booking: "Booking request",
+  send: "Wants something sent",
+  todo: "To-do",
+};
+
+/**
+ * Client texts Faith forwarded from her iPhone ("Send to Perfect Pours"
+ * Shortcut) or pasted below. Oldest first, so nothing sits forgotten at the
+ * bottom. The app's guess at what each text wants decides which button is
+ * the dark one; every option is always there.
+ */
+function InboxCard({ items, clients, error }: { items: InboxRow[]; clients: ClientOption[]; error?: string }) {
+  const buttonStyle = { padding: "0.4rem 0.7rem", fontSize: "0.85rem" };
+  const quiet = { ...buttonStyle, background: "none", color: "inherit", border: "1px solid var(--color-border)" };
+  return (
+    <div id="inbox" className="card" style={{ borderColor: items.length > 0 ? "var(--color-accent)" : undefined }}>
+      <h2 style={{ marginTop: 0, fontSize: "1rem" }}>
+        Texts to handle{items.length > 0 ? ` (${items.length})` : ""}
+      </h2>
+      {error && <p style={{ color: "var(--color-danger)", margin: "0 0 0.75rem" }}>{error}</p>}
+      {items.length === 0 ? (
+        <p style={{ color: "var(--color-muted)", margin: 0 }}>
+          Nothing waiting. Texts you send here from your phone show up in this list.{" "}
+          <a href="/admin/settings/text-inbox">Set up the iPhone button</a>
+        </p>
+      ) : (
+        <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: "0.9rem" }}>
+          {items.map((it) => (
+            <li key={it.id} style={{ borderTop: "1px solid var(--color-border)", paddingTop: "0.75rem" }}>
+              <div style={{ display: "flex", gap: "0.5rem", alignItems: "baseline", flexWrap: "wrap", marginBottom: "0.35rem" }}>
+                <span style={{ fontSize: "0.75rem", padding: "0.05rem 0.4rem", borderRadius: 4, background: "var(--color-soft)" }}>
+                  {KIND_LABELS[it.kind]}
+                  {it.guessed_date ? ` · ${formatDate(it.guessed_date)}` : ""}
+                </span>
+                <span style={{ fontSize: "0.78rem", color: "var(--color-muted)" }}>{ago(daysSince(it.created_at))}</span>
+              </div>
+              <p style={{ margin: "0 0 0.5rem", whiteSpace: "pre-wrap", overflowWrap: "anywhere", fontSize: "0.92rem" }}>{it.body}</p>
+              <form action={handleInboxItem} style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", alignItems: "center" }}>
+                <input type="hidden" name="id" value={it.id} />
+                <select
+                  name="clientId"
+                  defaultValue={it.client_id ?? ""}
+                  aria-label="Who it's from"
+                  style={{ padding: "0.4rem 0.5rem", borderRadius: 8, border: "1px solid var(--color-border)", fontSize: "0.85rem", maxWidth: "100%" }}
+                >
+                  <option value="">Who&apos;s it from?</option>
+                  {clients.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.first_name} {c.last_name ?? ""}
+                    </option>
+                  ))}
+                </select>
+                <button type="submit" name="do" value="booking" className="button" style={it.kind === "booking" ? buttonStyle : quiet}>
+                  Add booking
+                </button>
+                <button type="submit" name="do" value="open" className="button" style={it.kind === "send" ? buttonStyle : quiet}>
+                  Open their event
+                </button>
+                <button type="submit" name="do" value="todo" className="button" style={it.kind === "todo" ? buttonStyle : quiet}>
+                  Move to to-do
+                </button>
+                <button type="submit" name="do" value="done" className="button" style={quiet} title="Handled — clear it">
+                  Done ✓
+                </button>
+              </form>
+            </li>
+          ))}
+        </ul>
+      )}
+      <form action={addInboxText} style={{ display: "flex", gap: "0.5rem", marginTop: "0.9rem" }}>
+        <input
+          type="text"
+          name="text"
+          placeholder="Paste a text here"
+          style={{ flex: 1, padding: "0.5rem 0.65rem", borderRadius: 8, border: "1px solid var(--color-border)", fontSize: "0.9rem" }}
         />
         <button type="submit" className="button">
           Add
