@@ -395,11 +395,43 @@ export async function assignStaffToEvent(formData: FormData) {
   await requireAdmin();
   const supabase = createClient();
   const eventId = String(formData.get("eventId"));
-  const staffId = String(formData.get("staffId") ?? "");
+  let staffId = String(formData.get("staffId") ?? "");
   const role = String(formData.get("role") ?? "").trim();
-  const isOpen = staffId === ""; // "Open position" chosen instead of a staff member
+  const typedName = String(formData.get("oneOffName") ?? "").trim().replace(/\s+/g, " ");
 
   if (!role) return;
+
+  // A one-off person typed in by name (someone who only works once in a
+  // while). Reuses their record if that name was typed before, so their
+  // payout history stays together; otherwise adds them as an *inactive*
+  // staff member, which keeps them out of the everyday staff dropdowns and
+  // availability emails. Reactivate them on the Staff page if they become
+  // a regular.
+  if (typedName) {
+    const [firstName, ...rest] = typedName.split(" ");
+    const lastName = rest.join(" ");
+    const { data: existing } = await supabase
+      .from("staff")
+      .select("id")
+      .ilike("first_name", firstName)
+      .ilike("last_name", lastName)
+      .limit(1)
+      .maybeSingle();
+    if (existing) {
+      staffId = existing.id;
+    } else {
+      const { data: created } = await supabase
+        .from("staff")
+        .insert({ first_name: firstName, last_name: lastName, roles: [role], active: false })
+        .select("id")
+        .single();
+      if (!created) return;
+      await supabase.from("staff_details").insert({ staff_id: created.id });
+      staffId = created.id;
+    }
+  }
+
+  const isOpen = staffId === ""; // "Open position" chosen instead of a staff member
 
   await supabase.from("event_staff").insert({
     event_id: eventId,
@@ -409,6 +441,7 @@ export async function assignStaffToEvent(formData: FormData) {
   });
 
   revalidatePath(`/admin/events/${eventId}/staff`);
+  if (typedName) revalidatePath("/admin/staff");
 }
 
 /**

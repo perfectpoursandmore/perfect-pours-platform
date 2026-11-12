@@ -132,7 +132,7 @@ export default async function EventStaffPage({ params }: { params: { id: string 
         <h2 style={{ marginTop: 0, fontSize: "1rem" }}>Assign staff</h2>
         <form
           action={assignStaffToEvent}
-          style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: "0.75rem", alignItems: "end" }}
+          style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "0.75rem", alignItems: "end" }}
         >
           <input type="hidden" name="eventId" value={params.id} />
           <div>
@@ -150,6 +150,10 @@ export default async function EventStaffPage({ params }: { params: { id: string 
                 </option>
               ))}
             </select>
+          </div>
+          <div>
+            <label htmlFor="oneOffName">Or type a name</label>
+            <input id="oneOffName" name="oneOffName" placeholder="Someone not on your list" />
           </div>
           <div>
             <label htmlFor="role">Role</label>
@@ -174,6 +178,10 @@ export default async function EventStaffPage({ params }: { params: { id: string 
             Add
           </button>
         </form>
+        <p style={{ margin: "0.6rem 0 0", fontSize: "0.82rem", color: "var(--color-muted)" }}>
+          A typed-in name gets saved quietly (not added to your regular staff list), so you can still track
+          their pay here. Type the same name next time and it&apos;ll match them.
+        </p>
       </div>
 
       <div className="card">
