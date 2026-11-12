@@ -337,6 +337,12 @@ export async function updateEventQuickDetails(formData: FormData): Promise<{ err
       ...readEventTimes(formData, eventDate),
       guest_count: readGuestCount(formData),
       ...readAddressFields(formData),
+      // Name and venue are only sent by the calendar quick view; leave them
+      // alone when a form doesn't include them.
+      ...(formData.has("name") && String(formData.get("name")).trim()
+        ? { name: String(formData.get("name")).trim() }
+        : {}),
+      ...(formData.has("venueName") ? { venue_name: nullIfEmpty(formData.get("venueName")) } : {}),
     })
     .eq("id", id);
 

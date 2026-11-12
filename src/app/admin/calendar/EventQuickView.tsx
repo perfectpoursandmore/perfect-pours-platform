@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { CSSProperties, FormEvent, ReactNode } from "react";
-import { EVENT_STATUS_LABELS, EVENT_TYPE_LABELS, formatDate, formatTime } from "@/lib/labels";
+import { EVENT_STATUS_LABELS, EVENT_TYPE_LABELS, formatDate } from "@/lib/labels";
 import { timeOfDayInZone } from "@/lib/calendar-dates";
 import {
   assignStaffToEvent,
@@ -61,7 +61,7 @@ export function EventQuickView() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [editing, setEditing] = useState(false);
+  const [saved, setSaved] = useState(false);
 
   const load = useCallback(async (id: string) => {
     setLoading(true);
@@ -84,7 +84,7 @@ export function EventQuickView() {
       const detail = (e as CustomEvent<{ eventId: string }>).detail;
       if (!detail?.eventId) return;
       setEventId(detail.eventId);
-      setEditing(false);
+      setSaved(false);
       void load(detail.eventId);
     }
     window.addEventListener(QUICKVIEW_OPEN_EVENT, onOpen);
@@ -95,7 +95,7 @@ export function EventQuickView() {
     setEventId(null);
     setData(null);
     setError(null);
-    setEditing(false);
+    setSaved(false);
   }, []);
 
   useEffect(() => {
@@ -133,13 +133,14 @@ export function EventQuickView() {
     formData.set("id", eventId);
     setBusy(true);
     setError(null);
+    setSaved(false);
     try {
       const result = await updateEventQuickDetails(formData);
       if (result.error) {
         setError(result.error);
         return;
       }
-      setEditing(false);
+      setSaved(true);
       await load(eventId);
       router.refresh();
     } finally {
@@ -251,8 +252,22 @@ export function EventQuickView() {
               </button>
             </div>
 
-            {editing ? (
-              <form onSubmit={handleSaveDetails} style={{ display: "grid", gap: "0.6rem", fontSize: "0.9rem" }}>
+            {data.event.client && (
+              <p style={{ margin: "-0.5rem 0 0", fontSize: "0.9rem" }}>
+                Client:{" "}
+                {data.event.client_id ? (
+                  <a href={`/admin/clients/${data.event.client_id}`}>
+                    {data.event.client.first_name} {data.event.client.last_name}
+                  </a>
+                ) : (
+                  `${data.event.client.first_name} ${data.event.client.last_name}`
+                )}
+              </p>
+            )}
+              <form key={`${data.event.id}-${data.event.event_date}`} onSubmit={handleSaveDetails} style={{ display: "grid", gap: "0.6rem", fontSize: "0.9rem" }}>
+                <Field label="Event name" htmlFor="qv-name">
+                  <input id="qv-name" name="name" required defaultValue={data.event.name} style={inputStyle} />
+                </Field>
                 <div style={twoCol}>
                   <Field label="Date" htmlFor="qv-eventDate">
                     <input id="qv-eventDate" name="eventDate" type="date" required defaultValue={data.event.event_date} style={inputStyle} />
@@ -272,6 +287,9 @@ export function EventQuickView() {
                     <input id="qv-staffEndTime" name="staffEndTime" type="time" defaultValue={timeOfDayInZone(data.event.staff_end_time)} style={inputStyle} />
                   </Field>
                 </div>
+                <Field label="Venue (optional)" htmlFor="qv-venueName">
+                  <input id="qv-venueName" name="venueName" defaultValue={data.event.venue_name ?? ""} placeholder="Leave blank if it's at their home" style={inputStyle} />
+                </Field>
                 <Field label="Address" htmlFor="qv-addressLine">
                   <input id="qv-addressLine" name="addressLine" defaultValue={data.event.address_line ?? ""} style={inputStyle} />
                 </Field>
@@ -288,46 +306,11 @@ export function EventQuickView() {
                 </div>
                 <div style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
                   <button type="submit" className="button" disabled={busy}>
-                    {busy ? "Saving…" : "Save"}
+                    {busy ? "Saving…" : "Save changes"}
                   </button>
-                  <button type="button" disabled={busy} onClick={() => setEditing(false)} style={linkButton}>
-                    Cancel
-                  </button>
+                  {saved && <span style={{ fontSize: "0.85rem", color: "var(--color-muted)" }}>Saved ✓</span>}
                 </div>
               </form>
-            ) : (
-              <div style={{ display: "grid", gap: "0.5rem" }}>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.6rem", fontSize: "0.9rem" }}>
-                  {data.event.client && (
-                    <InfoField
-                      label="Client"
-                      value={
-                        data.event.client_id ? (
-                          <a href={`/admin/clients/${data.event.client_id}`}>
-                            {data.event.client.first_name} {data.event.client.last_name}
-                          </a>
-                        ) : (
-                          `${data.event.client.first_name} ${data.event.client.last_name}`
-                        )
-                      }
-                    />
-                  )}
-                  <InfoField
-                    label="Location"
-                    value={[data.event.venue_name, data.event.address_line, data.event.city, data.event.state]
-                      .filter(Boolean)
-                      .join(", ") || "TBD"}
-                  />
-                  <InfoField label="Guest count" value={data.event.guest_count ? String(data.event.guest_count) : "—"} />
-                  <InfoField label="Staff arrival" value={formatTime(data.event.staff_arrival_time)} />
-                  <InfoField label="Event start" value={formatTime(data.event.guest_arrival_time)} />
-                  <InfoField label="Staff end" value={formatTime(data.event.staff_end_time)} />
-                </div>
-                <button type="button" onClick={() => setEditing(true)} style={linkButton}>
-                  Edit date, times, guests or address
-                </button>
-              </div>
-            )}
 
             <div>
               <h3 style={{ margin: "0 0 0.5rem", fontSize: "0.95rem" }}>Staffing</h3>
@@ -493,21 +476,4 @@ const inputStyle: CSSProperties = {
 const twoCol: CSSProperties = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.6rem" };
 const threeCol: CSSProperties = { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0.6rem" };
 
-const linkButton: CSSProperties = {
-  background: "none",
-  border: "none",
-  padding: 0,
-  color: "var(--color-accent)",
-  cursor: "pointer",
-  fontSize: "0.85rem",
-  justifySelf: "start",
-};
 
-function InfoField({ label, value }: { label: string; value: ReactNode }) {
-  return (
-    <div>
-      <div style={{ fontSize: "0.75rem", color: "var(--color-muted)" }}>{label}</div>
-      <div>{value}</div>
-    </div>
-  );
-}
