@@ -397,7 +397,7 @@ export function EventQuickView() {
               )}
             </div>
 
-            <form onSubmit={handleAssign} style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: "0.6rem", alignItems: "end" }}>
+            <form onSubmit={handleAssign} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "0.6rem", alignItems: "end" }}>
               <div>
                 <label htmlFor="qv-staffId" style={{ fontSize: "0.8rem" }}>
                   Person
@@ -410,6 +410,17 @@ export function EventQuickView() {
                     </option>
                   ))}
                 </select>
+              </div>
+              <div>
+                <label htmlFor="qv-oneOffName" style={{ fontSize: "0.8rem" }}>
+                  Or type a name
+                </label>
+                <input
+                  id="qv-oneOffName"
+                  name="oneOffName"
+                  placeholder="Not on your list"
+                  style={{ width: "100%", padding: "0.5rem 0.6rem", borderRadius: 8, border: "1px solid var(--color-border)" }}
+                />
               </div>
               <div>
                 <label htmlFor="qv-role" style={{ fontSize: "0.8rem" }}>
