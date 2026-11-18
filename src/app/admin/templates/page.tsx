@@ -11,7 +11,10 @@ export default async function TemplatesPage() {
   return (
     <div style={{ display: "grid", gap: "1.5rem", maxWidth: 720 }}>
       <div>
-        <h1 style={{ margin: 0 }}>Contract templates</h1>
+        <a href="/admin/settings" className="muted small" style={{ textDecoration: "none" }}>
+          ← Settings
+        </a>
+        <h1 style={{ margin: "0.5rem 0 0" }}>Contract templates</h1>
         <p style={{ color: "var(--color-muted)" }}>
           Available placeholders, filled in automatically for each event: {" "}
           <code>

@@ -65,7 +65,10 @@ export default async function PayoutsPage({
   return (
     <div style={{ display: "grid", gap: "1.5rem" }}>
       <div>
-        <h1 style={{ margin: 0 }}>Payouts</h1>
+        <a href="/admin/staff" className="muted small" style={{ textDecoration: "none" }}>
+          ← Staff
+        </a>
+        <h1 style={{ margin: "0.5rem 0 0" }}>Payouts</h1>
         <p style={{ color: "var(--color-muted)" }}>Who's owed money, and who's already been paid.</p>
       </div>
 

@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/server";
 import { RoleShell } from "@/components/RoleShell";
 import { GlobalSearch } from "@/components/GlobalSearch";
+import { NewMenu } from "@/components/NewMenu";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser();
@@ -29,20 +30,25 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     <RoleShell
       areaLabel="Admin"
       userName={user.fullName}
+      // Kept short on purpose. Pages used less often live one tap inside these:
+      // Leads under Clients; Availability + Payouts on Staff; Services and
+      // both template pages under Settings; the full event list on Calendar.
       navItems={[
-        { label: "Dashboard", href: "/admin" },
-        { label: "Leads", href: "/admin/leads" },
-        { label: "Clients", href: "/admin/clients" },
-        { label: "Events", href: "/admin/events" },
-        { label: "Staff", href: "/admin/staff" },
-        { label: "Availability", href: "/admin/staff/availability" },
-        { label: "Payouts", href: "/admin/payouts" },
-        { label: "Services", href: "/admin/services" },
-        { label: "Templates", href: "/admin/templates" },
-        { label: "Email Templates", href: "/admin/email-templates" },
+        { label: "Today", href: "/admin" },
         { label: "Calendar", href: "/admin/calendar" },
+        { label: "Clients", href: "/admin/clients" },
+        { label: "Staff", href: "/admin/staff" },
         { label: "Settings", href: "/admin/settings" },
       ]}
+      topAction={
+        <NewMenu
+          items={[
+            { label: "New booking", href: "/admin/events/new" },
+            { label: "Paste a client text", href: "/admin#inbox" },
+            { label: "Add a to-do", href: "/admin#todo" },
+          ]}
+        />
+      }
     >
       <GlobalSearch />
       {qboNeedsReconnect && (

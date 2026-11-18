@@ -40,7 +40,6 @@ export default async function ClientsPage() {
                 <th style={{ padding: "0.75rem 1rem" }}>Name</th>
                 <th style={{ padding: "0.75rem 1rem" }}>Email</th>
                 <th style={{ padding: "0.75rem 1rem" }}>Phone</th>
-                <th style={{ padding: "0.75rem 1rem" }}>Credit</th>
               </tr>
             </thead>
             <tbody>
@@ -52,15 +51,12 @@ export default async function ClientsPage() {
                       <a href={`/admin/clients/${client.id}`}>
                         {client.first_name} {client.last_name}
                       </a>
-                    </td>
-                    <td style={{ padding: "0.75rem 1rem" }}>{client.email ?? "—"}</td>
-                    <td style={{ padding: "0.75rem 1rem" }}>{client.phone ?? "—"}</td>
-                    <td style={{ padding: "0.75rem 1rem" }}>
+                      {/* Only shows for someone with credit added on their page (Add account credit). */}
                       {credit ? (
                         <span
                           style={{
+                            marginLeft: "0.5rem",
                             background: "var(--color-soft)",
-                            color: "var(--color-text)",
                             borderRadius: 999,
                             padding: "0.15rem 0.6rem",
                             fontSize: "0.82rem",
@@ -70,10 +66,10 @@ export default async function ClientsPage() {
                         >
                           {formatMoney(credit)} credit
                         </span>
-                      ) : (
-                        "—"
-                      )}
+                      ) : null}
                     </td>
+                    <td style={{ padding: "0.75rem 1rem" }}>{client.email ?? "—"}</td>
+                    <td style={{ padding: "0.75rem 1rem" }}>{client.phone ?? "—"}</td>
                   </tr>
                 );
               })}

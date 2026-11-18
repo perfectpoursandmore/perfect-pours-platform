@@ -5,87 +5,80 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth/roles";
 import { addInboxItem } from "@/lib/inbox";
+import { TODO_COLORS } from "@/lib/todo-colors";
 
 async function requireAdmin() {
   const user = await getCurrentUser();
   if (!user || user.role !== "admin") redirect("/login");
 }
 
-/**
- * A quick, typed note for the dashboard's "Upcoming consultations" card --
- * for a call or follow-up Faith scheduled herself (by text, a call, in
- * person) that never went through the public booking flow, so there's
- * nowhere structured to put it. Freeform on purpose: "Call with Nicole at
- * 1:30pm - follow up" is the whole point, not a date/time picker.
- */
-export async function addDashboardNote(formData: FormData) {
+// ---------------------------------------------------------------------
+// The one running "To do" list on the Today screen. Faith types an item,
+// presses Enter, and keeps going. Checking an item strikes it through (it
+// stays put until she clears it). Color is optional and has no fixed
+// meaning: she uses it however she likes ("next week", "less important").
+// These are called straight from the list (no page reload) and hand back
+// what changed so the list updates instantly.
+// ---------------------------------------------------------------------
+
+export async function addTodoItem(text: string): Promise<{ id: string; created_at: string } | null> {
   await requireAdmin();
   const supabase = createClient();
-  const note = String(formData.get("note") ?? "").trim();
-  if (!note) return;
+  const item = String(text ?? "").trim().slice(0, 500);
+  if (!item) return null;
 
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  await supabase.from("dashboard_notes").insert({ note, created_by: user?.id ?? null });
+  // list_type is left over from the old Daily/Weekly split; everything is one list now.
+  const { data } = await supabase
+    .from("todos")
+    .insert({ list_type: "daily", item, created_by: user?.id ?? null })
+    .select("id, created_at")
+    .single();
 
   revalidatePath("/admin");
+  return data ?? null;
 }
 
-/** Clears one note once Faith's handled it (made the call, followed up). */
-export async function removeDashboardNote(formData: FormData) {
+export async function setTodoDone(id: string, done: boolean) {
   await requireAdmin();
   const supabase = createClient();
-  const id = String(formData.get("id"));
-
-  await supabase.from("dashboard_notes").delete().eq("id", id);
-
-  revalidatePath("/admin");
-}
-
-/**
- * Adds an item to either the Daily or Weekly to-do list (list_type tells
- * them apart). Both lists work the same way -- nothing here auto-resets or
- * expires; Faith checks items off and removes them herself, same as the
- * dashboard notes above.
- */
-export async function addTodo(formData: FormData) {
-  await requireAdmin();
-  const supabase = createClient();
-  const listType = String(formData.get("listType") ?? "");
-  const item = String(formData.get("item") ?? "").trim();
-  if (!item || (listType !== "daily" && listType !== "weekly")) return;
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  await supabase.from("todos").insert({ list_type: listType, item, created_by: user?.id ?? null });
-
-  revalidatePath("/admin");
-}
-
-/** Checks (or unchecks) one to-do item -- the button submits the state it should flip to. */
-export async function toggleTodo(formData: FormData) {
-  await requireAdmin();
-  const supabase = createClient();
-  const id = String(formData.get("id"));
-  const done = String(formData.get("done")) === "true";
-
   await supabase.from("todos").update({ is_done: done }).eq("id", id);
-
   revalidatePath("/admin");
 }
 
-/** Removes a to-do item for good -- once it's done and out of mind, or it was added by mistake. */
-export async function removeTodo(formData: FormData) {
+/** Pass null to take the color off. Anything not in the palette is ignored. */
+export async function setTodoColor(id: string, color: string | null) {
+  await requireAdmin();
+  if (color !== null && !(TODO_COLORS as readonly string[]).includes(color)) return;
+  const supabase = createClient();
+  await supabase.from("todos").update({ color }).eq("id", id);
+  revalidatePath("/admin");
+}
+
+export async function editTodoText(id: string, text: string) {
+  await requireAdmin();
+  const item = String(text ?? "").trim().slice(0, 500);
+  if (!item) return;
+  const supabase = createClient();
+  await supabase.from("todos").update({ item }).eq("id", id);
+  revalidatePath("/admin");
+}
+
+export async function deleteTodo(id: string) {
   await requireAdmin();
   const supabase = createClient();
-  const id = String(formData.get("id"));
-
   await supabase.from("todos").delete().eq("id", id);
+  revalidatePath("/admin");
+}
 
+/** "Clear checked items": removes everything that's been crossed off. */
+export async function clearDoneTodos() {
+  await requireAdmin();
+  const supabase = createClient();
+  await supabase.from("todos").delete().eq("is_done", true);
   revalidatePath("/admin");
 }
 
@@ -128,7 +121,7 @@ export async function removeInboxItem(formData: FormData) {
  *              (the item clears once the booking is saved)
  *   open    -> opens that client's next event (or their client page) so she
  *              can send what they asked for; the item stays until she taps Done
- *   todo    -> moves it to her Daily to-do list
+ *   todo    -> moves it to her To do list
  *   done    -> clears it
  */
 export async function handleInboxItem(formData: FormData) {

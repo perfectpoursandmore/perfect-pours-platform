@@ -623,7 +623,7 @@ export async function upsertEventStaffPayout(formData: FormData) {
 export async function deleteEvent(formData: FormData) {
   await requireAdmin();
   await removeEventAndRevalidate(String(formData.get("id")));
-  redirect("/admin/events");
+  redirect("/admin/calendar");
 }
 
 /**

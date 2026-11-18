@@ -38,7 +38,7 @@ export async function GET(request: Request) {
       .limit(8),
     supabase
       .from("leads")
-      .select("id, first_name, last_name, email, phone, event_type, status")
+      .select("id, first_name, last_name, email, phone, event_type, status, client_id")
       .or(
         `first_name.ilike.${pattern},last_name.ilike.${pattern},email.ilike.${pattern},phone.ilike.${pattern},event_type.ilike.${pattern}`
       )
@@ -79,7 +79,10 @@ export async function GET(request: Request) {
     });
   }
 
+  // Inquiries already create a client + event, so those are what search
+  // shows. Only an old lead that never became a client is listed on its own.
   for (const l of leads ?? []) {
+    if (l.client_id) continue;
     results.push({
       type: "lead",
       id: l.id,

@@ -291,7 +291,7 @@ export default async function EventBookingPage({
       </section>
 
       {/* ---------- Send pricing ---------- */}
-      <section className="card" style={{ display: "grid", gap: "0.9rem" }}>
+      <section id="pricing" className="card" style={{ display: "grid", gap: "0.9rem" }}>
         <div>
           <h2 style={h2}>Send pricing</h2>
           <p className="muted small" style={{ margin: "0.25rem 0 0" }}>
@@ -542,7 +542,7 @@ export default async function EventBookingPage({
       </section>
 
       {/* ---------- Contract & invoice ---------- */}
-      <section className="card" style={{ display: "grid", gap: "1rem" }}>
+      <section id="contract" className="card" style={{ display: "grid", gap: "1rem" }}>
         <h2 style={h2}>Contract &amp; invoice</h2>
         {financials?.qbo_sync_error && <p style={{ margin: 0, color: "var(--color-danger)" }}>QuickBooks: {financials.qbo_sync_error}</p>}
         {qboConnected && qboConnection?.environment !== "production" && (

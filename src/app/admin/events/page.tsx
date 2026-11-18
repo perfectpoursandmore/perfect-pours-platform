@@ -12,7 +12,10 @@ export default async function EventsPage() {
     <div style={{ display: "grid", gap: "1.5rem" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", gap: "1rem", flexWrap: "wrap" }}>
         <div>
-          <h1 style={{ margin: 0 }}>Events</h1>
+          <a href="/admin/calendar" className="muted small" style={{ textDecoration: "none" }}>
+            ← Calendar
+          </a>
+          <h1 style={{ margin: "0.5rem 0 0" }}>All events</h1>
           <p style={{ color: "var(--color-muted)" }}>Every event, past and upcoming.</p>
         </div>
         <div style={{ display: "flex", gap: "0.75rem" }}>
