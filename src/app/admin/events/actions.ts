@@ -7,6 +7,8 @@ import { getCurrentUser } from "@/lib/auth/roles";
 import { isEmailConfigured, sendEmail, sendTemplatedEmail } from "@/lib/email";
 import { formatDate, formatDateTime } from "@/lib/labels";
 import { zonedTimeToIso } from "@/lib/calendar-dates";
+import { parseEasyTime } from "@/lib/easy-time";
+import { EVENT_TYPE_LABELS } from "@/lib/labels";
 import { syncEventToGoogle, removeEventFromGoogle } from "@/lib/google-event-sync";
 import { getClientAddress, hasAddress, rememberClientAddress } from "@/lib/client-address";
 import { DISHWARE, EXTRA_HELP, SERVICES, SERVICE_STYLES, cleanValue, cleanValues } from "@/lib/event-details";
@@ -249,29 +251,24 @@ export async function quickAddEvent(
   await requireAdmin();
   const supabase = createClient();
 
-  const name = String(formData.get("name") ?? "").trim();
+  // One box for both: Faith names a booking after the person ("Jane Doe").
+  const name = String(formData.get("name") ?? "").trim().replace(/\s+/g, " ");
   const eventDate = String(formData.get("eventDate") ?? "");
   if (!name || !eventDate) {
-    return { error: "Event name and date are required." };
+    return { error: "Type a name and pick a date." };
   }
 
-  let clientId = String(formData.get("clientId") ?? "");
-  if (!clientId) {
-    const newClientName = String(formData.get("newClientName") ?? "").trim();
-    if (!newClientName) {
-      return { error: "Who's this for? A first name is enough -- you can add the rest later." };
-    }
-    const [firstName, ...rest] = newClientName.split(" ");
-    const { data: newClient, error: clientError } = await supabase
-      .from("clients")
-      .insert({ first_name: firstName, last_name: rest.join(" ") || null })
-      .select("id")
-      .single();
-    if (clientError || !newClient) {
-      return { error: "Couldn't create that client." };
-    }
-    clientId = newClient.id;
-  }
+  const times = readEventTimes(formData, eventDate);
+  if ("error" in times) return times;
+
+  const typeRaw = String(formData.get("eventType") ?? "");
+  const eventType = typeRaw in EVENT_TYPE_LABELS ? typeRaw : "other";
+
+  // If the name is an existing client's first + last name (or starts with
+  // it, like "Jane Doe 40th"), the event goes under that client. Otherwise
+  // a new client is made from the name, since every event needs one.
+  const clientId = await findOrCreateClientByName(supabase, name);
+  if (!clientId) return { error: "Couldn't save that name." };
 
   // Everything below is optional on the quick add form. A blank address
   // falls back to the client's saved home address, same as before; one typed
@@ -288,11 +285,11 @@ export async function quickAddEvent(
     .insert({
       client_id: clientId,
       name,
-      event_type: "other",
+      event_type: eventType,
       event_date: eventDate,
       ...place,
       guest_count: readGuestCount(formData),
-      ...readEventTimes(formData, eventDate),
+      ...times,
       // Default is a HOLD: most quick adds are a call/text that isn't confirmed yet.
       status: formData.get("status") === "booked" ? "booked" : "inquiry",
     })
@@ -329,12 +326,14 @@ export async function updateEventQuickDetails(formData: FormData): Promise<{ err
   const eventDate = String(formData.get("eventDate") ?? "");
   if (!id) return { error: "That event couldn't be found." };
   if (!eventDate) return { error: "The event needs a date." };
+  const times = readEventTimes(formData, eventDate);
+  if ("error" in times) return times;
 
   const { error } = await supabase
     .from("events")
     .update({
       event_date: eventDate,
-      ...readEventTimes(formData, eventDate),
+      ...times,
       guest_count: readGuestCount(formData),
       ...readAddressFields(formData),
       // Name and venue are only sent by the calendar quick view; leave them
@@ -373,12 +372,53 @@ function readGuestCount(formData: FormData): number | null {
 }
 
 // Same "HH:MM on the event's own day" handling as updateEventOverview.
-function readEventTimes(formData: FormData, eventDate: string) {
-  return {
-    staff_arrival_time: zonedTimeToIso(eventDate, String(formData.get("staffArrivalTime") ?? "")),
-    guest_arrival_time: zonedTimeToIso(eventDate, String(formData.get("guestArrivalTime") ?? "")),
-    staff_end_time: zonedTimeToIso(eventDate, String(formData.get("staffEndTime") ?? "")),
-  };
+function readEventTimes(
+  formData: FormData,
+  eventDate: string
+): { staff_arrival_time: string | null; guest_arrival_time: string | null; staff_end_time: string | null } | { error: string } {
+  // Typed the quick way: "3" = 3:00 PM, "3:30" = 3:30 PM, add "am" for morning.
+  const out: Record<string, string | null> = {};
+  for (const [field, column] of [
+    ["staffArrivalTime", "staff_arrival_time"],
+    ["guestArrivalTime", "guest_arrival_time"],
+    ["staffEndTime", "staff_end_time"],
+  ] as const) {
+    const typed = String(formData.get(field) ?? "");
+    const hhmm = parseEasyTime(typed);
+    if (hhmm === null) return { error: `Couldn't read the time "${typed.trim()}". Try 3, 3:30 or 10am.` };
+    out[column] = zonedTimeToIso(eventDate, hhmm);
+  }
+  return out as { staff_arrival_time: string | null; guest_arrival_time: string | null; staff_end_time: string | null };
+}
+
+/**
+ * Quick add's one name box. Matches an existing client when the typed name
+ * is (or starts with) their first + last name, ignoring capitals; with more
+ * than one match it uses the most recently added. No match: a new client is
+ * created from the name (events always belong to a client).
+ */
+async function findOrCreateClientByName(supabase: ReturnType<typeof createClient>, typed: string): Promise<string | null> {
+  const lower = typed.toLowerCase();
+  const [first] = typed.split(" ");
+  const { data: candidates } = await supabase
+    .from("clients")
+    .select("id, first_name, last_name, created_at")
+    .ilike("first_name", first.replace(/[%_\\]/g, ""))
+    .order("created_at", { ascending: false });
+  const match = (candidates ?? []).find((c) => {
+    const full = `${c.first_name} ${c.last_name ?? ""}`.trim().replace(/\s+/g, " ").toLowerCase();
+    if (!c.last_name) return false; // a first name alone is too loose to match on
+    return lower === full || lower.startsWith(full + " ");
+  });
+  if (match) return match.id;
+
+  const [firstName, ...rest] = typed.split(" ");
+  const { data: created } = await supabase
+    .from("clients")
+    .insert({ first_name: firstName, last_name: rest.join(" ") || null })
+    .select("id")
+    .single();
+  return created?.id ?? null;
 }
 
 export async function addEventNote(formData: FormData) {

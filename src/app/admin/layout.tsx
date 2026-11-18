@@ -43,7 +43,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       topAction={
         <NewMenu
           items={[
-            { label: "New booking", href: "/admin/events/new" },
+            { label: "New booking", href: "/admin/calendar?quickadd=1" },
             { label: "Paste a client text", href: "/admin#inbox" },
             { label: "Add a to-do", href: "/admin#todo" },
           ]}

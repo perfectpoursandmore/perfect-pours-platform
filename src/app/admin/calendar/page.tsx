@@ -62,13 +62,6 @@ export default async function AdminCalendarPage({
     .lte("event_date", rangeEnd)
     .order("event_date", { ascending: true });
 
-  // For Quick Add's "who's this for" dropdown -- same source list as the
-  // full "Add a booking" form.
-  const { data: clients } = await supabase
-    .from("clients")
-    .select("id, first_name, last_name")
-    .order("first_name");
-
   const eventsByDate = new Map<string, CalendarEvent[]>();
   for (const event of (events ?? []) as CalendarEvent[]) {
     const list = eventsByDate.get(event.event_date) ?? [];
@@ -107,7 +100,7 @@ export default async function AdminCalendarPage({
             <a href="/admin/events/import-times">Import from spreadsheet</a>
           </p>
         </div>
-        <QuickAddEvent clients={clients ?? []} defaultDate={anchor} autoOpen={searchParams.quickadd === "1"} />
+        <QuickAddEvent defaultDate={anchor} autoOpen={searchParams.quickadd === "1"} />
       </div>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "1rem" }}>

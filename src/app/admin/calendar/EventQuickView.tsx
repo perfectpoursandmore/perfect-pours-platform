@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { friendlyTime } from "@/lib/easy-time";
 import { useRouter } from "next/navigation";
 import type { CSSProperties, FormEvent, ReactNode } from "react";
 import { EVENT_STATUS_LABELS, EVENT_TYPE_LABELS, formatDate } from "@/lib/labels";
@@ -278,13 +279,13 @@ export function EventQuickView() {
                 </div>
                 <div style={threeCol}>
                   <Field label="Staff arrival" htmlFor="qv-staffArrivalTime">
-                    <input id="qv-staffArrivalTime" name="staffArrivalTime" type="time" defaultValue={timeOfDayInZone(data.event.staff_arrival_time)} style={inputStyle} />
+                    <input id="qv-staffArrivalTime" name="staffArrivalTime" placeholder="e.g. 3 or 3:30" autoComplete="off" defaultValue={friendlyTime(timeOfDayInZone(data.event.staff_arrival_time))} style={inputStyle} />
                   </Field>
                   <Field label="Event start" htmlFor="qv-guestArrivalTime">
-                    <input id="qv-guestArrivalTime" name="guestArrivalTime" type="time" defaultValue={timeOfDayInZone(data.event.guest_arrival_time)} style={inputStyle} />
+                    <input id="qv-guestArrivalTime" name="guestArrivalTime" placeholder="e.g. 3 or 3:30" autoComplete="off" defaultValue={friendlyTime(timeOfDayInZone(data.event.guest_arrival_time))} style={inputStyle} />
                   </Field>
                   <Field label="Staff end" htmlFor="qv-staffEndTime">
-                    <input id="qv-staffEndTime" name="staffEndTime" type="time" defaultValue={timeOfDayInZone(data.event.staff_end_time)} style={inputStyle} />
+                    <input id="qv-staffEndTime" name="staffEndTime" placeholder="e.g. 3 or 3:30" autoComplete="off" defaultValue={friendlyTime(timeOfDayInZone(data.event.staff_end_time))} style={inputStyle} />
                   </Field>
                 </div>
                 <Field label="Venue (optional)" htmlFor="qv-venueName">
