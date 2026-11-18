@@ -2,13 +2,14 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { addStaffMember, toggleStaffActive, inviteStaffLogin } from "./actions";
+import { AvailabilitySection } from "./AvailabilitySection";
 
 const ALL_ROLES = ["bartender", "server", "barback"];
 
 export default async function StaffDirectoryPage({
   searchParams,
 }: {
-  searchParams: { error?: string; notice?: string };
+  searchParams: { error?: string; notice?: string; date?: string };
 }) {
   const supabase = createClient();
 
@@ -33,54 +34,19 @@ export default async function StaffDirectoryPage({
     <div style={{ display: "grid", gap: "1.5rem", maxWidth: 720 }}>
       <div>
         <h1 style={{ margin: 0 }}>Staff</h1>
-        <p style={{ color: "var(--color-muted)" }}>
-          Your team, so you can assign them to events. Only you can see phone, email, and pay
-          rate — staff logins never see this directory's contact or pay info.
+        <p style={{ color: "var(--color-muted)", margin: "0.3rem 0 0" }}>
+          Your team, who&apos;s free, and what you owe them. Only you see phone, email and pay rate.
+        </p>
+        <p className="small" style={{ margin: "0.5rem 0 0", display: "flex", gap: "1rem", flexWrap: "wrap" }}>
+          <a href="#availability">Who&apos;s free?</a>
+          <a href="/admin/payouts">Payouts</a>
+          <a href="#add-staff">Add someone</a>
         </p>
       </div>
 
       {searchParams.error && <p style={{ color: "var(--color-danger)" }}>{searchParams.error}</p>}
       {searchParams.notice && <p style={{ color: "var(--color-accent)" }}>{searchParams.notice}</p>}
 
-      <form action={addStaffMember} className="card" style={{ display: "grid", gap: "1rem" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
-          <div>
-            <label htmlFor="firstName">First name</label>
-            <input id="firstName" name="firstName" required />
-          </div>
-          <div>
-            <label htmlFor="lastName">Last name</label>
-            <input id="lastName" name="lastName" required />
-          </div>
-        </div>
-
-        <div>
-          <label>Roles</label>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "1rem" }}>
-            {ALL_ROLES.map((role) => (
-              <label key={role} style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.9rem" }}>
-                <input type="checkbox" name={`role-${role}`} />
-                {role[0].toUpperCase() + role.slice(1)}
-              </label>
-            ))}
-          </div>
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
-          <div>
-            <label htmlFor="phone">Phone</label>
-            <input id="phone" name="phone" />
-          </div>
-          <div>
-            <label htmlFor="email">Email</label>
-            <input id="email" name="email" type="email" />
-          </div>
-        </div>
-
-        <button type="submit" className="button" style={{ justifySelf: "start" }}>
-          Add staff member
-        </button>
-      </form>
 
       <div className="card" style={{ padding: 0 }}>
         {staff && staff.length > 0 ? (
@@ -158,6 +124,50 @@ export default async function StaffDirectoryPage({
           </p>
         )}
       </div>
+      <details id="add-staff" className="card">
+        <summary style={{ fontWeight: 600 }}>+ Add a staff member</summary>
+        <form action={addStaffMember} style={{ display: "grid", gap: "1rem", marginTop: "1rem" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+            <div>
+              <label htmlFor="firstName">First name</label>
+              <input id="firstName" name="firstName" required />
+            </div>
+            <div>
+              <label htmlFor="lastName">Last name</label>
+              <input id="lastName" name="lastName" required />
+            </div>
+          </div>
+
+          <div>
+            <label>Roles</label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "1rem" }}>
+              {ALL_ROLES.map((role) => (
+                <label key={role} style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.9rem" }}>
+                  <input type="checkbox" name={`role-${role}`} />
+                  {role[0].toUpperCase() + role.slice(1)}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+            <div>
+              <label htmlFor="phone">Phone</label>
+              <input id="phone" name="phone" />
+            </div>
+            <div>
+              <label htmlFor="email">Email</label>
+              <input id="email" name="email" type="email" />
+            </div>
+          </div>
+
+          <button type="submit" className="button" style={{ justifySelf: "start" }}>
+            Add staff member
+          </button>
+        </form>
+      </details>
+
+      <AvailabilitySection date={searchParams.date} />
     </div>
   );
 }

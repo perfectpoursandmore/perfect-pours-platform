@@ -17,7 +17,10 @@ export default async function LeadsPage({
   return (
     <div style={{ display: "grid", gap: "1.5rem" }}>
       <div>
-        <h1 style={{ margin: 0 }}>Leads</h1>
+        <a href="/admin/clients" className="muted small" style={{ textDecoration: "none" }}>
+          ← Clients
+        </a>
+        <h1 style={{ margin: "0.5rem 0 0" }}>Leads</h1>
         <p style={{ color: "var(--color-muted)" }}>
           Everyone who's booked a consultation or come in as an inquiry, in one pipeline.
         </p>

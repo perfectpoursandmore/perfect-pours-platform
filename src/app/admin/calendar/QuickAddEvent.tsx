@@ -4,20 +4,18 @@ import { useState } from "react";
 import type { CSSProperties, FormEvent } from "react";
 import { quickAddEvent } from "../events/actions";
 import { openEventQuickView } from "./quickview-bus";
-
-type Client = { id: string; first_name: string; last_name: string | null };
+import { EVENT_TYPE_LABELS } from "@/lib/labels";
 
 // Sits on the calendar page itself so getting something onto the calendar
-// never requires leaving it. Only a name, a date, and a client are required;
-// times, guest count and address can be filled in here too or left for
-// later. Once it's added, the event's quick view opens so staff can be
+// never requires leaving it. Only a name and a date are required: the name
+// doubles as the client (matched to an existing client by first + last
+// name). Event type is optional; everything else is tucked under "More
+// details". Times are typed the quick way ("3" = 3 PM). Once it's added, the event's quick view opens so staff can be
 // assigned straight away.
 export function QuickAddEvent({
-  clients,
   defaultDate,
   autoOpen = false,
 }: {
-  clients: Client[];
   defaultDate: string;
   autoOpen?: boolean; // the Home Screen app opens straight into this
 }) {
@@ -80,8 +78,7 @@ export function QuickAddEvent({
               <div>
                 <h2 style={{ margin: 0, fontSize: "1.1rem" }}>Quick add an event</h2>
                 <p style={{ margin: "0.25rem 0 0", color: "var(--color-muted)", fontSize: "0.85rem" }}>
-                  Just enough to hold the date. Times, guests and address are optional; pricing and
-                  everything else can wait for the event page.
+                  A name and a date is all it needs.
                 </p>
               </div>
               <button
@@ -107,121 +104,102 @@ export function QuickAddEvent({
             <form onSubmit={handleSubmit} style={{ display: "grid", gap: "0.85rem" }}>
               <div>
                 <label htmlFor="qa-name" style={{ fontSize: "0.85rem" }}>
-                  Event name
+                  Event / client name
                 </label>
-                <input
-                  id="qa-name"
-                  name="name"
-                  required
-                  placeholder="e.g. Mom's staff holiday party"
-                  style={inputStyle}
-                />
+                <input id="qa-name" name="name" required placeholder="e.g. Jane Doe" autoComplete="off" style={inputStyle} />
+                <span style={hint}>If this matches a client&apos;s first and last name, it goes under them.</span>
+              </div>
+
+              <div style={twoCol}>
+                <div>
+                  <label htmlFor="qa-date" style={{ fontSize: "0.85rem" }}>
+                    Date
+                  </label>
+                  <input id="qa-date" name="eventDate" type="date" required defaultValue={defaultDate} style={inputStyle} />
+                </div>
+                <div>
+                  <label htmlFor="qa-guestArrivalTime" style={{ fontSize: "0.85rem" }}>
+                    Start time
+                  </label>
+                  <input id="qa-guestArrivalTime" name="guestArrivalTime" placeholder="e.g. 3 or 3:30" autoComplete="off" style={inputStyle} />
+                </div>
               </div>
 
               <div>
-                <label htmlFor="qa-date" style={{ fontSize: "0.85rem" }}>
-                  Date
+                <label htmlFor="qa-eventType" style={{ fontSize: "0.85rem" }}>
+                  Event type (optional)
                 </label>
-                <input id="qa-date" name="eventDate" type="date" required defaultValue={defaultDate} style={inputStyle} />
-              </div>
-
-              <div>
-                <label htmlFor="qa-clientId" style={{ fontSize: "0.85rem" }}>
-                  Who&apos;s this for
-                </label>
-                <select id="qa-clientId" name="clientId" defaultValue="" style={inputStyle}>
-                  <option value="">+ New — type a name below</option>
-                  {clients.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.first_name} {c.last_name ?? ""}
+                <select id="qa-eventType" name="eventType" defaultValue="" style={inputStyle}>
+                  <option value="">Skip</option>
+                  {Object.entries(EVENT_TYPE_LABELS).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
                     </option>
                   ))}
                 </select>
               </div>
 
-              <div>
-                <label htmlFor="qa-newClientName" style={{ fontSize: "0.85rem" }}>
-                  New name (skip if you picked someone above)
-                </label>
-                <input
-                  id="qa-newClientName"
-                  name="newClientName"
-                  placeholder="e.g. Mom, or Mom's staff"
-                  style={inputStyle}
-                />
-              </div>
+              <details>
+                <summary style={{ fontSize: "0.9rem", color: "var(--color-muted)" }}>More details (optional)</summary>
+                <div style={{ display: "grid", gap: "0.85rem", marginTop: "0.75rem" }}>
+                  <div style={twoCol}>
+                    <div>
+                      <label htmlFor="qa-staffArrivalTime" style={{ fontSize: "0.85rem" }}>
+                        Staff arrival
+                      </label>
+                      <input id="qa-staffArrivalTime" name="staffArrivalTime" placeholder="e.g. 2" autoComplete="off" style={inputStyle} />
+                    </div>
+                    <div>
+                      <label htmlFor="qa-staffEndTime" style={{ fontSize: "0.85rem" }}>
+                        Staff end
+                      </label>
+                      <input id="qa-staffEndTime" name="staffEndTime" placeholder="e.g. 9:30" autoComplete="off" style={inputStyle} />
+                    </div>
+                  </div>
 
-              <div style={threeCol}>
-                <div>
-                  <label htmlFor="qa-staffArrivalTime" style={{ fontSize: "0.85rem" }}>
-                    Staff arrival
-                  </label>
-                  <input id="qa-staffArrivalTime" name="staffArrivalTime" type="time" style={inputStyle} />
-                </div>
-                <div>
-                  <label htmlFor="qa-guestArrivalTime" style={{ fontSize: "0.85rem" }}>
-                    Event start
-                  </label>
-                  <input id="qa-guestArrivalTime" name="guestArrivalTime" type="time" style={inputStyle} />
-                </div>
-                <div>
-                  <label htmlFor="qa-staffEndTime" style={{ fontSize: "0.85rem" }}>
-                    Staff end
-                  </label>
-                  <input id="qa-staffEndTime" name="staffEndTime" type="time" style={inputStyle} />
-                </div>
-              </div>
+                  <div>
+                    <label htmlFor="qa-guestCount" style={{ fontSize: "0.85rem" }}>
+                      Guest count
+                    </label>
+                    <input id="qa-guestCount" name="guestCount" type="number" min={1} style={inputStyle} />
+                  </div>
 
-              <div>
-                <label htmlFor="qa-guestCount" style={{ fontSize: "0.85rem" }}>
-                  Guest count
-                </label>
-                <input id="qa-guestCount" name="guestCount" type="number" min={1} style={inputStyle} />
-              </div>
+                  <div>
+                    <label htmlFor="qa-addressLine" style={{ fontSize: "0.85rem" }}>
+                      Address (blank = their home address)
+                    </label>
+                    <input id="qa-addressLine" name="addressLine" style={inputStyle} />
+                  </div>
 
-              <div>
-                <label htmlFor="qa-addressLine" style={{ fontSize: "0.85rem" }}>
-                  Address (leave blank to use their home address)
-                </label>
-                <input id="qa-addressLine" name="addressLine" style={inputStyle} />
-              </div>
+                  <div style={threeCol}>
+                    <div>
+                      <label htmlFor="qa-city" style={{ fontSize: "0.85rem" }}>
+                        City
+                      </label>
+                      <input id="qa-city" name="city" style={inputStyle} />
+                    </div>
+                    <div>
+                      <label htmlFor="qa-state" style={{ fontSize: "0.85rem" }}>
+                        State
+                      </label>
+                      <input id="qa-state" name="state" style={inputStyle} />
+                    </div>
+                    <div>
+                      <label htmlFor="qa-zip" style={{ fontSize: "0.85rem" }}>
+                        ZIP
+                      </label>
+                      <input id="qa-zip" name="zip" style={inputStyle} />
+                    </div>
+                  </div>
 
-              <div style={threeCol}>
-                <div>
-                  <label htmlFor="qa-city" style={{ fontSize: "0.85rem" }}>
-                    City
-                  </label>
-                  <input id="qa-city" name="city" style={inputStyle} />
-                </div>
-                <div>
-                  <label htmlFor="qa-state" style={{ fontSize: "0.85rem" }}>
-                    State
-                  </label>
-                  <input id="qa-state" name="state" style={inputStyle} />
-                </div>
-                <div>
-                  <label htmlFor="qa-zip" style={{ fontSize: "0.85rem" }}>
-                    ZIP
-                  </label>
-                  <input id="qa-zip" name="zip" style={inputStyle} />
-                </div>
-              </div>
-
-              <div>
-                <span style={{ display: "block", fontSize: "0.85rem", color: "var(--color-muted)", marginBottom: "0.35rem" }}>
-                  Status
-                </span>
-                <div style={{ display: "grid", gap: "0.35rem" }}>
                   <label style={radioLabel}>
-                    <input type="radio" name="status" value="inquiry" defaultChecked />
-                    Hold, not confirmed yet
-                  </label>
-                  <label style={radioLabel}>
-                    <input type="radio" name="status" value="booked" />
-                    Booked
+                    <input type="checkbox" name="status" value="booked" />
+                    Already booked (otherwise it&apos;s a hold)
                   </label>
                 </div>
-              </div>
+              </details>
+
+              <p style={{ ...hint, margin: 0 }}>Times: 3 means 3:00 PM, 3:30 means 3:30 PM. Add &quot;am&quot; for morning.</p>
 
               <button type="submit" className="button" disabled={busy} style={{ justifySelf: "start" }}>
                 {busy ? "Adding…" : "Add to calendar"}
@@ -249,5 +227,9 @@ const inputStyle: CSSProperties = {
   borderRadius: 8,
   border: "1px solid var(--color-border)",
 };
+
+const twoCol: CSSProperties = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.6rem" };
+
+const hint: CSSProperties = { display: "block", fontSize: "0.8rem", color: "var(--color-muted)", marginTop: "0.25rem" };
 
 const threeCol: CSSProperties = { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0.6rem" };

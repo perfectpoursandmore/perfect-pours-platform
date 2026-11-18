@@ -6,10 +6,12 @@ type RoleShellProps = {
   areaLabel: string;
   userName: string | null;
   navItems: { label: string; href: string }[];
+  /** Optional button shown at the top of the side bar and on the phone top bar (e.g. "+ New"). */
+  topAction?: React.ReactNode;
   children: React.ReactNode;
 };
 
-export function RoleShell({ areaLabel, userName, navItems, children }: RoleShellProps) {
+export function RoleShell({ areaLabel, userName, navItems, topAction, children }: RoleShellProps) {
   // Only matters on phones: the side bar is hidden off-screen until the
   // three-line menu button opens it. On desktop it's always visible.
   const [menuOpen, setMenuOpen] = useState(false);
@@ -42,6 +44,7 @@ export function RoleShell({ areaLabel, userName, navItems, children }: RoleShell
           <div style={{ fontWeight: 600 }}>Perfect Pours</div>
           <div style={{ fontSize: "0.8rem", color: "var(--color-muted)" }}>{areaLabel}</div>
         </div>
+        {topAction && <div style={{ marginLeft: "auto" }}>{topAction}</div>}
       </header>
 
       {menuOpen && <div className="role-shell-backdrop" onClick={() => setMenuOpen(false)} />}
@@ -62,12 +65,14 @@ export function RoleShell({ areaLabel, userName, navItems, children }: RoleShell
           </button>
         </div>
 
+        {topAction && <div className="role-shell-aside-action">{topAction}</div>}
+
         <nav className="role-shell-nav">
           {navItems.map((item) => (
             <a
               key={item.href}
               href={item.href}
-              style={{ fontSize: "0.9rem", color: "inherit" }}
+              style={{ fontSize: "0.98rem", color: "inherit" }}
               onClick={() => setMenuOpen(false)}
             >
               {item.label}

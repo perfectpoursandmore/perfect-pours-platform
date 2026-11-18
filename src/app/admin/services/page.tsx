@@ -13,7 +13,10 @@ export default async function ServicesPage({
   return (
     <div style={{ display: "grid", gap: "2rem", maxWidth: 760 }}>
       <div>
-        <h1 style={{ margin: 0 }}>Services</h1>
+        <a href="/admin/settings" className="muted small" style={{ textDecoration: "none" }}>
+          ← Settings
+        </a>
+        <h1 style={{ margin: "0.5rem 0 0" }}>Services</h1>
         <p style={{ color: "var(--color-muted)", marginBottom: 0 }}>
           Jump to:{" "}
           <a href="#pricing" style={{ color: "var(--color-accent)" }}>

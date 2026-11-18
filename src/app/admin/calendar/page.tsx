@@ -62,13 +62,6 @@ export default async function AdminCalendarPage({
     .lte("event_date", rangeEnd)
     .order("event_date", { ascending: true });
 
-  // For Quick Add's "who's this for" dropdown -- same source list as the
-  // full "Add a booking" form.
-  const { data: clients } = await supabase
-    .from("clients")
-    .select("id, first_name, last_name")
-    .order("first_name");
-
   const eventsByDate = new Map<string, CalendarEvent[]>();
   for (const event of (events ?? []) as CalendarEvent[]) {
     const list = eventsByDate.get(event.event_date) ?? [];
@@ -101,9 +94,13 @@ export default async function AdminCalendarPage({
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", gap: "1rem", flexWrap: "wrap" }}>
         <div>
           <h1 style={{ margin: 0 }}>Calendar</h1>
-          <p style={{ color: "var(--color-muted)" }}>Every booked event, plus HOLDs for requests that aren&apos;t confirmed yet. Click one for a quick view.</p>
+          <p style={{ color: "var(--color-muted)", margin: "0.3rem 0 0" }}>Every booked event, plus HOLDs for requests that aren&apos;t confirmed yet. Click one for a quick view.</p>
+          <p className="small" style={{ margin: "0.4rem 0 0", display: "flex", gap: "1rem", flexWrap: "wrap" }}>
+            <a href="/admin/events">List of all events (incl. past)</a>
+            <a href="/admin/events/import-times">Import from spreadsheet</a>
+          </p>
         </div>
-        <QuickAddEvent clients={clients ?? []} defaultDate={anchor} autoOpen={searchParams.quickadd === "1"} />
+        <QuickAddEvent defaultDate={anchor} autoOpen={searchParams.quickadd === "1"} />
       </div>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "1rem" }}>

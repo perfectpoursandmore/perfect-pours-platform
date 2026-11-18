@@ -159,7 +159,7 @@ export async function requestDayAvailability(formData: FormData) {
   const staffIds = formData.getAll("staffIds").map(String).filter(Boolean);
 
   if (!date || staffIds.length === 0) {
-    redirect(`/admin/staff/availability?date=${encodeURIComponent(date)}`);
+    redirect(`/admin/staff?date=${encodeURIComponent(date)}#availability`);
   }
 
   const { data: staffRows } = await supabase
@@ -211,8 +211,8 @@ export async function requestDayAvailability(formData: FormData) {
     });
   }
 
-  revalidatePath("/admin/staff/availability");
-  redirect(`/admin/staff/availability?date=${encodeURIComponent(date)}`);
+  revalidatePath("/admin/staff");
+  redirect(`/admin/staff?date=${encodeURIComponent(date)}#availability`);
 }
 
 /** Cancels a day-level availability ask -- e.g. she meant a different date or person. */
@@ -224,6 +224,6 @@ export async function withdrawDayAvailabilityRequest(formData: FormData) {
 
   await supabase.from("staff_date_availability").delete().eq("id", id);
 
-  revalidatePath("/admin/staff/availability");
-  redirect(`/admin/staff/availability?date=${encodeURIComponent(date)}`);
+  revalidatePath("/admin/staff");
+  redirect(`/admin/staff?date=${encodeURIComponent(date)}#availability`);
 }
