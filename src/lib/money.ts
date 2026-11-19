@@ -133,6 +133,36 @@ export async function moneyForEvents(supabase: SupabaseLike, eventIds: string[])
 
 /** True once the expenses SQL has been run in Supabase. */
 export async function expensesReady(supabase: SupabaseLike): Promise<boolean> {
-  const { error } = await supabase.from("expenses").select("id").limit(1);
+  const { error } = await supabase.from("mileage_trips").select("id").limit(1);
   return !error;
+}
+
+export type StaffYearRow = { staffId: string; name: string; pay: number; events: number; missing: number };
+
+/** What each staff person was paid (from Payouts) across these events. */
+export async function staffPayByPerson(supabase: SupabaseLike, eventIds: string[]): Promise<StaffYearRow[]> {
+  if (eventIds.length === 0) return [];
+  const { data: assignments } = await supabase
+    .from("event_staff")
+    .select("id, event_id, staff_id, staff:staff_id(first_name, last_name)")
+    .in("event_id", eventIds)
+    .not("staff_id", "is", null);
+  type A = { id: string; event_id: string; staff_id: string; staff: { first_name: string; last_name: string } | { first_name: string; last_name: string }[] | null };
+  const rows = (assignments ?? []) as A[];
+  const ids = rows.map((a) => a.id);
+  const { data: payouts } = ids.length
+    ? await supabase.from("event_staff_payouts").select("event_staff_id, expected_pay").in("event_staff_id", ids)
+    : { data: [] };
+  const pay = new Map<string, number>(((payouts ?? []) as { event_staff_id: string; expected_pay: unknown }[]).map((p) => [p.event_staff_id, num(p.expected_pay)]));
+  const byPerson = new Map<string, StaffYearRow>();
+  for (const a of rows) {
+    const person = Array.isArray(a.staff) ? a.staff[0] : a.staff;
+    const cur = byPerson.get(a.staff_id) ?? { staffId: a.staff_id, name: person ? `${person.first_name} ${person.last_name}`.trim() : "Staff", pay: 0, events: 0, missing: 0 };
+    const p = pay.get(a.id) ?? 0;
+    cur.pay = round2(cur.pay + p);
+    cur.events += 1;
+    if (p <= 0) cur.missing += 1;
+    byPerson.set(a.staff_id, cur);
+  }
+  return Array.from(byPerson.values()).sort((x, y) => y.pay - x.pay);
 }

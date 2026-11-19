@@ -63,7 +63,7 @@ export default async function EventMoneyPage({ params }: { params: { id: string 
               : "From Payouts"
           }
         />
-        <Row label="Supplies" value={`− ${formatMoney(m.supplies)}`} hint={`${receipts.length} receipt${receipts.length === 1 ? "" : "s"}`} />
+        <Row label="Supplies" value={`− ${formatMoney(m.supplies)}`} hint={`${receipts.length} purchase${receipts.length === 1 ? "" : "s"}`} />
         <Row label="You kept" value={formatMoney(m.kept)} strong />
 
         {(m.gratuity > 0 || m.salesTax > 0) && (
@@ -85,14 +85,19 @@ export default async function EventMoneyPage({ params }: { params: { id: string 
 
       <div className="card" style={{ display: "grid", gap: "0.75rem" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
-          <h2 style={{ margin: 0, fontSize: "1rem" }}>Receipts for this event</h2>
-          <a className="button" href={`/admin/money/new?event=${params.id}`}>
-            + Add a receipt
-          </a>
+          <h2 style={{ margin: 0, fontSize: "1rem" }}>Spending for this event</h2>
+          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+            <a className="button" href="/admin/money">
+              Tag from QuickBooks
+            </a>
+            <a className="button-secondary" href={`/admin/money/new?event=${params.id}`}>
+              + Cash receipt
+            </a>
+          </div>
         </div>
         {receipts.length === 0 ? (
           <p className="muted" style={{ margin: 0 }}>
-            None yet. That&apos;s fine if this event only needed staff.
+            Nothing tagged to this event yet. That&apos;s fine if it only needed staff.
           </p>
         ) : (
           receipts.map((r, i) => {

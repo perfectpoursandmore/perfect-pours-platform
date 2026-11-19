@@ -4,6 +4,9 @@ import { isEmailConfigured, sendEmail } from "@/lib/email";
 import { addDays, todayDateString, zonedTimeToIso } from "@/lib/calendar-dates";
 import { formatDate, formatTime } from "@/lib/labels";
 import { getPreferences } from "@/lib/preferences";
+import { fillEventTrips, getMoneySettings } from "@/lib/mileage";
+import { moneySummary } from "@/lib/money-summary";
+import { upcomingTaxDates, whenText } from "@/lib/tax-dates";
 
 // Runs every morning (vercel.json: 12:00 UTC = 7 AM Eastern in winter,
 // 8 AM in summer). Two jobs, each with an on/off switch on the Today screen:
@@ -29,6 +32,14 @@ export async function GET(request: Request) {
   if (prefs.clear_done_overnight) {
     const { error } = await supabase.from("todos").delete().eq("is_done", true);
     result.cleared = !error;
+  }
+
+  // Mileage: work out round trips for recent events while nobody's waiting.
+  try {
+    const today = todayDateString();
+    result.tripsAdded = await fillEventTrips(supabase, await getMoneySettings(supabase), { from: addDays(today, -45), to: addDays(today, 1), limit: 8 });
+  } catch (err) {
+    console.error("Mileage fill failed:", err);
   }
 
   const to = await adminEmail(supabase);
@@ -67,12 +78,46 @@ export async function GET(request: Request) {
         ? `<ul style="margin:0;padding-left:18px">${rows.map((r) => `<li style="margin:3px 0">${r}</li>`).join("")}</ul>`
         : `<p style="margin:0;color:#6e6e6e">${empty}</p>`);
 
+    // Tax due dates, a week ahead.
+    const taxDates = upcomingTaxDates(today, 7, (await getMoneySettings(supabase)).sales_tax_filing);
+    const taxHtml = taxDates.length
+      ? section("Taxes", taxDates.map((t) => `<strong>${esc(t.title)} ${esc(whenText(today, t.date))}.</strong> ${esc(t.detail)}`), "")
+      : "";
+
+    // On the 1st: last month's money at a glance.
+    let monthHtml = "";
+    if (today.endsWith("-01")) {
+      try {
+        const [y, m] = today.split("-").map(Number);
+        const start = m === 1 ? `${y - 1}-12-01` : `${y}-${String(m - 1).padStart(2, "0")}-01`;
+        const sum = await moneySummary(supabase, start, today);
+        const label = new Date(Number(start.slice(0, 4)), Number(start.slice(5, 7)) - 1, 15).toLocaleDateString("en-US", { month: "long" });
+        const usd = (n: number) => n.toLocaleString("en-US", { style: "currency", currency: "USD" });
+        monthHtml = section(
+          `${label} money`,
+          [
+            `Sales: ${usd(sum.sales)}`,
+            `Spent: ${usd(sum.spent)}`,
+            `Paid to staff: ${usd(sum.staff)}`,
+            `<strong>You kept: ${usd(sum.kept)}</strong>`,
+            `Miles: ${sum.miles.toLocaleString("en-US")} (${usd(sum.mileageDeduction)} deduction)`,
+            `Set aside for taxes: <strong>${usd(sum.setAside)}</strong> (${sum.setAsidePct}%)`,
+          ],
+          ""
+        ) + `<p style="margin:6px 0 0"><a href="${appUrl}/admin/money?m=${start.slice(0, 7)}">See ${label}</a></p>`;
+      } catch (err) {
+        console.error("Monthly money summary failed:", err);
+      }
+    }
+
     const html = `<div style="font-family:system-ui,-apple-system,sans-serif;font-size:15px;color:#111;max-width:520px">
 <p style="margin:0 0 4px">Good morning! Here's your day.</p>
 ${section("To do", (todos ?? []).slice(0, 15).map((t) => esc(t.item)), "Nothing on your list. 🎉")}
 ${section("Calls today", (calls ?? []).map((c) => `${formatTime(c.consultation_at)} · ${esc(`${c.first_name} ${c.last_name ?? ""}`.trim())}`), "No calls today.")}
 ${section("Events today", todayEvents.map((e) => `${e.guest_arrival_time ? `${formatTime(e.guest_arrival_time)} · ` : ""}${esc(e.name)}`), "No events today.")}
 ${laterEvents.length ? section("Later this week", laterEvents.map((e) => `${formatDate(e.event_date)} · ${esc(e.name)}`), "") : ""}
+${taxHtml}
+${monthHtml}
 ${textCount ? `<p style="margin:20px 0 0"><strong>${textCount} client text${textCount === 1 ? "" : "s"}</strong> waiting for you.</p>` : ""}
 <p style="margin:24px 0 0"><a href="${appUrl}/admin" style="display:inline-block;background:#8a2346;color:#fff;padding:10px 18px;border-radius:999px;text-decoration:none">Open Today</a></p>
 <p style="margin:16px 0 0;font-size:12px;color:#6e6e6e">You can turn this email off at the bottom of the Today screen.</p>

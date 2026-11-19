@@ -37,8 +37,8 @@ export default async function NewReceiptPage({ searchParams }: { searchParams: {
         <a href={preselect ? `/admin/events/${preselect}/money` : "/admin/money"} className="muted small" style={{ textDecoration: "none" }}>
           ← Back
         </a>
-        <h1 style={{ margin: "0.5rem 0 0" }}>Add a receipt</h1>
-        <p className="muted" style={{ margin: "0.2rem 0 0" }}>Just the total. No itemizing.</p>
+        <h1 style={{ margin: "0.5rem 0 0" }}>Cash receipt</h1>
+        <p className="muted" style={{ margin: "0.2rem 0 0" }}>For things QuickBooks won&apos;t see, like cash. Card and bank spending comes in from QuickBooks on its own.</p>
       </div>
       {!ready && <ExpensesSetupBox />}
       <ReceiptForm events={events} preselectEventId={preselect} today={today} />

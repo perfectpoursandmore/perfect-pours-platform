@@ -46,7 +46,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             { label: "New booking", href: "/admin/calendar?quickadd=1" },
             { label: "Paste a client text", href: "/admin#inbox" },
             { label: "Add a to-do", href: "/admin#todo" },
-            { label: "Add a receipt", href: "/admin/money/new" },
+            { label: "Cash receipt", href: "/admin/money/new" },
           ]}
         />
       }
