@@ -3,6 +3,12 @@ export default function SettingsIndexPage() {
     <div style={{ display: "grid", gap: "1rem" }}>
       <h1 style={{ margin: 0 }}>Settings</h1>
       <div style={{ display: "grid", gap: "0.75rem", maxWidth: 360 }}>
+        <a className="card" href="/admin/money" style={{ textDecoration: "none", color: "inherit" }}>
+          <strong>Money</strong>
+          <div style={{ color: "var(--color-muted)", fontSize: "0.9rem" }}>
+            Receipts, and what you kept each month
+          </div>
+        </a>
         <a className="card" href="/admin/services" style={{ textDecoration: "none", color: "inherit" }}>
           <strong>Services &amp; prices</strong>
           <div style={{ color: "var(--color-muted)", fontSize: "0.9rem" }}>

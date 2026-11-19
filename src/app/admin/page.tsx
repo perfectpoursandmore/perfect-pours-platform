@@ -3,6 +3,8 @@ import { formatDate, formatDateTime } from "@/lib/labels";
 import { addInboxText, handleInboxItem, saveInboxNote, removeInboxItem, setPreference } from "./actions";
 import { getPreferences } from "@/lib/preferences";
 import { TodoList, type TodoItem } from "./TodoList";
+import { getMoneySettings } from "@/lib/mileage";
+import { upcomingTaxDates, whenText } from "@/lib/tax-dates";
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
@@ -79,6 +81,9 @@ export default async function TodayPage({ searchParams }: { searchParams: { inbo
 
   const colorsReady = !colorCheck.error;
   const prefs = await getPreferences(supabase);
+  const todayEt = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+  // Tax due dates show up two weeks ahead, nowhere else to check.
+  const taxDates = upcomingTaxDates(todayEt, 14, (await getMoneySettings(supabase)).sales_tax_filing);
   const setupSql = [colorsReady ? "" : COLOR_SQL, prefs.ready ? "" : PREFS_SQL].filter(Boolean).join("\n\n");
   const todoItems: TodoItem[] = ((todos ?? []) as (TodoItem & { color?: string | null })[]).map((t) => ({
     id: t.id,
@@ -108,6 +113,12 @@ export default async function TodayPage({ searchParams }: { searchParams: { inbo
           </pre>
         </details>
       )}
+
+      {taxDates.map((t) => (
+        <a key={t.date + t.title} href="/admin/money" className="notice" style={{ display: "block", margin: 0, textDecoration: "none", color: "inherit" }}>
+          <strong>{t.title} {whenText(todayEt, t.date)}.</strong> {t.detail}
+        </a>
+      ))}
 
       <div className="today-grid">
         <TodoList initialItems={todoItems} colorsReady={colorsReady} />

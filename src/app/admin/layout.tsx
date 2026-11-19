@@ -31,7 +31,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       areaLabel="Admin"
       userName={user.fullName}
       // Kept short on purpose. Pages used less often live one tap inside these:
-      // Leads under Clients; Availability + Payouts on Staff; Services and
+      // Leads under Clients; Money (receipts) under Settings and each event; Availability + Payouts on Staff; Services and
       // both template pages under Settings; the full event list on Calendar.
       navItems={[
         { label: "Today", href: "/admin" },
@@ -46,6 +46,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             { label: "New booking", href: "/admin/calendar?quickadd=1" },
             { label: "Paste a client text", href: "/admin#inbox" },
             { label: "Add a to-do", href: "/admin#todo" },
+            { label: "Cash receipt", href: "/admin/money/new" },
           ]}
         />
       }

@@ -2,13 +2,14 @@
 
 import { usePathname } from "next/navigation";
 
-/** Overview / Notes / Staff / Booking tabs, with the current one underlined. */
+/** Booking / Overview / Staff / Money / Notes tabs, with the current one underlined. */
 export function EventTabs({ base }: { base: string }) {
   const pathname = usePathname();
   const tabs = [
     { label: "Booking", href: `${base}/booking` },
     { label: "Overview", href: base },
     { label: "Staff", href: `${base}/staff` },
+    { label: "Money", href: `${base}/money` },
     { label: "Notes", href: `${base}/notes` },
   ];
   return (
