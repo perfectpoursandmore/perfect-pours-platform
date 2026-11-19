@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 
 type RoleShellProps = {
   areaLabel: string;
@@ -15,6 +16,13 @@ export function RoleShell({ areaLabel, userName, navItems, topAction, children }
   // Only matters on phones: the side bar is hidden off-screen until the
   // three-line menu button opens it. On desktop it's always visible.
   const [menuOpen, setMenuOpen] = useState(false);
+  const pathname = usePathname() ?? "";
+  // The current section is highlighted. A top-level item like "/admin"
+  // only matches itself; the others also match their sub-pages.
+  const activeHref = navItems
+    .map((i) => i.href)
+    .filter((h) => pathname === h || (h.split("/").length > 2 && pathname.startsWith(h + "/")))
+    .sort((a, b) => b.length - a.length)[0];
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -72,7 +80,8 @@ export function RoleShell({ areaLabel, userName, navItems, topAction, children }
             <a
               key={item.href}
               href={item.href}
-              style={{ fontSize: "0.98rem", color: "inherit" }}
+              className={item.href === activeHref ? "active" : undefined}
+              style={{ fontSize: "0.98rem" }}
               onClick={() => setMenuOpen(false)}
             >
               {item.label}

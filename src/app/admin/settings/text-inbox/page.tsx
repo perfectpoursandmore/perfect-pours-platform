@@ -22,11 +22,12 @@ export default async function TextInboxSettingsPage() {
   const proto = h.get("x-forwarded-proto") ?? "https";
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || `${proto}://${host}`;
   const endpoint = `${appUrl.replace(/\/$/, "")}/api/inbox`;
+  const todoEndpoint = `${appUrl.replace(/\/$/, "")}/api/todo`;
 
   return (
     <div style={{ display: "grid", gap: "1.5rem", maxWidth: 620 }}>
       <div>
-        <h1 style={{ margin: 0 }}>Text inbox (iPhone)</h1>
+        <h1 style={{ margin: 0 }}>iPhone buttons</h1>
         <p style={{ color: "var(--color-muted)" }}>
           A one-tap button on your iPhone that sends a client&apos;s text to the &quot;Texts to
           handle&quot; list on your dashboard. Set it up once (about 5 minutes); after that it&apos;s
@@ -99,12 +100,40 @@ export default async function TextInboxSettingsPage() {
             </p>
           </div>
 
+          <div id="todo-shortcut" className="card">
+            <h2 style={{ marginTop: 0, fontSize: "1rem" }}>Second button: &quot;Add to my to-do&quot; (Siri or one tap)</h2>
+            <p style={{ marginTop: 0, fontSize: "0.92rem" }}>
+              Say <strong>&quot;Hey Siri, add to my to-do&quot;</strong>, say the thing, done. It lands on your To do list.
+              Same secret key as above, different web address:
+            </p>
+            <code style={{ ...code, marginBottom: "0.75rem" }}>{todoEndpoint}</code>
+            <ol style={{ margin: 0, paddingLeft: "1.2rem", display: "grid", gap: "0.6rem", fontSize: "0.92rem" }}>
+              <li>In <strong>Shortcuts</strong>, tap <strong>+</strong> and name it <strong>Add to my to-do</strong> (that name is what you say to Siri).</li>
+              <li>
+                Add the action <strong>Ask for Input</strong> (Text). For the prompt, type <em>What&apos;s the to-do?</em>
+              </li>
+              <li>
+                Add <strong>Get Contents of URL</strong>, paste the web address just above. Method <strong>POST</strong>,
+                Request Body <strong>JSON</strong>, two <strong>Text</strong> fields:
+                <ul style={{ marginTop: "0.3rem" }}>
+                  <li><code>token</code> → paste your secret key</li>
+                  <li><code>text</code> → pick <strong>Provided Input</strong> from the variable bar</li>
+                </ul>
+              </li>
+              <li>
+                Add <strong>Get Dictionary Value</strong> (<code>message</code>) and <strong>Show Notification</strong>,
+                same as the first button.
+              </li>
+              <li>Share icon → <strong>Add to Home Screen</strong> if you also want a tap button.</li>
+            </ol>
+          </div>
+
           <form action={resetInboxToken}>
             <button type="submit" className="button" style={{ background: "none", color: "inherit", border: "1px solid var(--color-border)" }}>
               Reset secret key
             </button>
             <span style={{ marginLeft: "0.6rem", fontSize: "0.82rem", color: "var(--color-muted)" }}>
-              Only if it got shared by accident. You&apos;ll need to paste the new key into the Shortcut.
+              Only if it got shared by accident. You&apos;ll need to paste the new key into both Shortcuts.
             </span>
           </form>
         </>

@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { formatDate, formatDateTime } from "@/lib/labels";
-import { addInboxText, handleInboxItem, saveInboxNote, removeInboxItem } from "./actions";
+import { addInboxText, handleInboxItem, saveInboxNote, removeInboxItem, setPreference } from "./actions";
+import { getPreferences } from "@/lib/preferences";
 import { TodoList, type TodoItem } from "./TodoList";
 
 function todayISO() {
@@ -24,6 +25,24 @@ begin
     delete from public.dashboard_notes;
   end if;
 end $$;`;
+
+// Same as supabase/migrations/0027_app_preferences.sql: the on/off switches.
+const PREFS_SQL = `create table if not exists public.app_preferences (
+  id boolean primary key default true check (id),
+  morning_email boolean not null default true,
+  clear_done_overnight boolean not null default true,
+  updated_at timestamptz not null default now()
+);
+
+insert into public.app_preferences (id) values (true) on conflict (id) do nothing;
+
+alter table public.app_preferences enable row level security;
+
+drop policy if exists "app_preferences: admin only" on public.app_preferences;
+create policy "app_preferences: admin only"
+  on public.app_preferences for all
+  using (public.is_admin())
+  with check (public.is_admin());`;
 
 /**
  * The Today screen: Faith's running To do list, client texts waiting on
@@ -59,6 +78,8 @@ export default async function TodayPage({ searchParams }: { searchParams: { inbo
     ]);
 
   const colorsReady = !colorCheck.error;
+  const prefs = await getPreferences(supabase);
+  const setupSql = [colorsReady ? "" : COLOR_SQL, prefs.ready ? "" : PREFS_SQL].filter(Boolean).join("\n\n");
   const todoItems: TodoItem[] = ((todos ?? []) as (TodoItem & { color?: string | null })[]).map((t) => ({
     id: t.id,
     item: t.item,
@@ -76,13 +97,16 @@ export default async function TodayPage({ searchParams }: { searchParams: { inbo
         <p className="muted" style={{ margin: "0.2rem 0 0" }}>{today}</p>
       </div>
 
-      {!colorsReady && (
-        <div className="notice">
-          <strong>One-time setup to turn on colors for your to-do list</strong> (it also moves your old notes onto the list). In Supabase, open the SQL Editor, paste this in and click Run:
-          <pre style={{ margin: "0.4rem 0 0", whiteSpace: "pre-wrap", fontSize: "0.82rem", background: "#fff", padding: "0.6rem", borderRadius: 6 }}>
-            {COLOR_SQL}
+      {setupSql && (
+        <details className="notice">
+          <summary>
+            <strong>One-time setup</strong> (turns on to-do colors and the on/off switches below). Tap to see how.
+          </summary>
+          <p style={{ margin: "0.5rem 0 0.4rem" }}>In Supabase, open the SQL Editor, paste all of this in and click Run. This box goes away after.</p>
+          <pre style={{ margin: 0, whiteSpace: "pre-wrap", fontSize: "0.82rem", background: "#fff", padding: "0.6rem", borderRadius: 6 }}>
+            {setupSql}
           </pre>
-        </div>
+        </details>
       )}
 
       <div className="today-grid">
@@ -133,7 +157,53 @@ export default async function TodayPage({ searchParams }: { searchParams: { inbo
           />
         </div>
       </div>
+
+      <div className="muted small" style={{ display: "flex", gap: "1.25rem", flexWrap: "wrap", alignItems: "center" }}>
+        <Toggle
+          name="morning_email"
+          on={prefs.morning_email}
+          label="Morning email at 7 AM"
+          disabled={!prefs.ready}
+        />
+        <Toggle
+          name="clear_done_overnight"
+          on={prefs.clear_done_overnight}
+          label="Clear checked items overnight"
+          disabled={!prefs.ready}
+        />
+      </div>
     </div>
+  );
+}
+
+/** One on/off switch: a small form whose button flips the setting. */
+function Toggle({ name, on, label, disabled }: { name: string; on: boolean; label: string; disabled: boolean }) {
+  return (
+    <form action={setPreference} style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+      <input type="hidden" name="key" value={name} />
+      <input type="hidden" name="value" value={String(!on)} />
+      <button
+        type="submit"
+        disabled={disabled}
+        aria-pressed={on}
+        title={disabled ? "Finish the one-time setup above first" : on ? "Turn off" : "Turn on"}
+        style={{
+          width: 40,
+          height: 24,
+          borderRadius: 999,
+          border: "none",
+          padding: 2,
+          cursor: disabled ? "not-allowed" : "pointer",
+          background: on ? "var(--color-booked-border)" : "var(--color-border-strong)",
+          opacity: disabled ? 0.5 : 1,
+          display: "flex",
+          justifyContent: on ? "flex-end" : "flex-start",
+        }}
+      >
+        <span style={{ width: 20, height: 20, borderRadius: "50%", background: "#fff", display: "block" }} />
+      </button>
+      <span>{label}</span>
+    </form>
   );
 }
 
