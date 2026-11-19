@@ -176,3 +176,14 @@ export async function handleInboxItem(formData: FormData) {
 
   revalidatePath("/admin");
 }
+
+/** The on/off switches at the bottom of the Today screen (morning email, overnight clear). */
+export async function setPreference(formData: FormData) {
+  await requireAdmin();
+  const key = String(formData.get("key") ?? "");
+  if (key !== "morning_email" && key !== "clear_done_overnight") return;
+  const value = String(formData.get("value")) === "true";
+  const supabase = createClient();
+  await supabase.from("app_preferences").upsert({ id: true, [key]: value, updated_at: new Date().toISOString() });
+  revalidatePath("/admin");
+}

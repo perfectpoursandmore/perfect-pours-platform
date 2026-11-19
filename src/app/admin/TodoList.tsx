@@ -23,6 +23,9 @@ export function TodoList({ initialItems, colorsReady }: { initialItems: TodoItem
   const [text, setText] = useState("");
   const [pickerFor, setPickerFor] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
+  const [popped, setPopped] = useState<string | null>(null);
+  const [focus, setFocus] = useState(false);
+  const [skipped, setSkipped] = useState<string[]>([]);
   const [, startTransition] = useTransition();
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -43,6 +46,7 @@ export function TodoList({ initialItems, colorsReady }: { initialItems: TodoItem
 
   function toggle(t: TodoItem) {
     setItems((prev) => prev.map((x) => (x.id === t.id ? { ...x, is_done: !x.is_done } : x)));
+    setPopped(t.is_done ? null : t.id); // a little "pop" when it gets checked
     startTransition(() => setTodoDone(t.id, !t.is_done));
   }
 
@@ -71,10 +75,62 @@ export function TodoList({ initialItems, colorsReady }: { initialItems: TodoItem
   }
 
   const doneCount = items.filter((t) => t.is_done).length;
+  const open = items.filter((t) => !t.is_done && !t.id.startsWith("temp-"));
+  // "Just one thing": the top unchecked item (red ones first), skipping any
+  // she said "not now" to. When everything's been skipped, start over.
+  const ordered = [...open.filter((t) => t.color === "red"), ...open.filter((t) => t.color !== "red")];
+  const focusItem = ordered.find((t) => !skipped.includes(t.id)) ?? null;
 
   return (
     <div id="todo" className="card" style={{ display: "grid", gap: "0.75rem" }}>
-      <h2 style={{ margin: 0, fontSize: "1.2rem" }}>To do</h2>
+      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+        <h2 style={{ margin: 0, fontSize: "1.2rem" }}>To do</h2>
+        {doneCount > 0 && <span className="done-count">🎉 {doneCount} done</span>}
+        {open.length > 0 && (
+          <button
+            type="button"
+            className="button-secondary"
+            style={{ marginLeft: "auto", padding: "0.35rem 0.85rem", fontSize: "0.85rem" }}
+            onClick={() => {
+              setSkipped([]);
+              setFocus(true);
+            }}
+          >
+            Just one thing
+          </button>
+        )}
+      </div>
+
+      {focus && (
+        <div className="focus-overlay" role="dialog" aria-label="Just one thing">
+          {focusItem ? (
+            <>
+              <div className="muted" style={{ fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", fontSize: "0.85rem" }}>
+                Just this one
+              </div>
+              <div className="focus-item">{focusItem.item}</div>
+              <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", justifyContent: "center" }}>
+                <button type="button" className="button" style={{ fontSize: "1.05rem", padding: "0.8rem 1.6rem" }} onClick={() => toggle(focusItem)}>
+                  Done ✓
+                </button>
+                <button
+                  type="button"
+                  className="button-secondary"
+                  style={{ fontSize: "1.05rem", padding: "0.8rem 1.6rem" }}
+                  onClick={() => setSkipped((s) => (ordered.every((t) => t.id === focusItem.id || s.includes(t.id)) ? [] : [...s, focusItem.id]))}
+                >
+                  Not now
+                </button>
+              </div>
+            </>
+          ) : (
+            <div className="focus-item">All done. 🎉</div>
+          )}
+          <button type="button" className="link-button" onClick={() => setFocus(false)}>
+            Back to my list
+          </button>
+        </div>
+      )}
 
       {items.length > 0 && (
         <ul className="todo-list">
@@ -92,7 +148,7 @@ export function TodoList({ initialItems, colorsReady }: { initialItems: TodoItem
               >
                 <button
                   type="button"
-                  className={`todo-check${t.is_done ? " done" : ""}`}
+                  className={`todo-check${t.is_done ? " done" : ""}${popped === t.id ? " pop" : ""}`}
                   aria-label={t.is_done ? "Mark not done" : "Mark done"}
                   onClick={() => toggle(t)}
                   disabled={temp}

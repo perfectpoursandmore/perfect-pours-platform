@@ -20,10 +20,13 @@ function handleClick(eventId: string) {
 export function EventChip({ event }: { event: CalendarEvent }) {
   const client = clientName(event);
   const hold = event.status === "inquiry";
+  // Yellow = hold, green = booked, gray = done (see globals.css).
+  const chipClass = hold ? "chip-hold" : event.status === "completed" ? "chip-done" : "chip-booked";
   return (
     <a
       href={`/admin/events/${event.id}`}
       onClick={handleClick(event.id)}
+      className={chipClass}
       style={{
         display: "block",
         fontSize: "0.78rem",
@@ -32,15 +35,14 @@ export function EventChip({ event }: { event: CalendarEvent }) {
         marginBottom: 2,
         textDecoration: "none",
         color: "inherit",
-        background: hold ? "#fff" : "var(--color-soft)",
-        border: hold ? "1px dashed var(--color-accent)" : "1px solid transparent",
+        border: "1px solid transparent",
         whiteSpace: "nowrap",
         overflow: "hidden",
         textOverflow: "ellipsis",
       }}
       title={`${hold ? "HOLD: " : ""}${event.name}${client ? ` — ${client}` : ""}`}
     >
-      {hold && <strong style={{ color: "var(--color-accent)" }}>HOLD </strong>}
+      {hold && <strong>HOLD </strong>}
       {event.name}
     </a>
   );

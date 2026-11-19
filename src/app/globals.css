@@ -3,7 +3,17 @@
   --color-bg: #ffffff;
   --color-text: #111111;
   --color-muted: #6e6e6e;
-  --color-accent: #111111;
+  /* The one brand color: buttons, "needs you" highlights, the current menu
+     item. A deep merlot; swap this one line to change it everywhere. */
+  --color-accent: #8a2346;
+  --color-accent-hover: #6e1b38;
+  --color-accent-soft: #f8e9ee;
+  /* Calendar status colors. */
+  --color-hold: #fff4cc;
+  --color-hold-border: #e0a800;
+  --color-booked: #e3f5ea;
+  --color-booked-border: #2f9e5e;
+  --color-done: #f0f0f0;
   --color-border: #e6e6e6;
   --color-border-strong: #cfcfcf;
   --color-soft: #f5f5f5;
@@ -66,7 +76,8 @@ code {
 }
 
 .button:hover {
-  background: #333;
+  background: var(--color-accent-hover);
+  border-color: var(--color-accent-hover);
 }
 
 .button:disabled {
@@ -211,6 +222,12 @@ label {
 
 .role-shell-nav a:hover {
   background: var(--color-soft);
+}
+
+.role-shell-nav a.active {
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+  font-weight: 600;
 }
 
 .role-shell-main {
@@ -438,18 +455,20 @@ label {
 
 /* ---------- The big "Next step" box at the top of each event ---------- */
 .next-step {
+  background: var(--color-accent-soft);
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
   flex-wrap: wrap;
-  border: 2px solid var(--color-text);
+  border: 2px solid var(--color-accent);
   border-radius: 12px;
   padding: 1rem 1.25rem;
 }
 
 .next-step.all-set {
-  border-color: var(--color-border);
+  background: var(--color-booked);
+  border-color: var(--color-booked-border);
 }
 
 /* ---------- "+ New" menu in the side bar / top bar ---------- */
@@ -549,4 +568,87 @@ label {
   .role-shell-aside-action {
     display: none;
   }
+}
+
+/* ---------- Calendar status colors ---------- */
+.chip-hold {
+  background: var(--color-hold);
+  border: 1px dashed var(--color-hold-border) !important;
+}
+
+.chip-booked {
+  background: var(--color-booked);
+  border-left: 3px solid var(--color-booked-border) !important;
+}
+
+.chip-done {
+  background: var(--color-done);
+  color: var(--color-muted) !important;
+}
+
+.calendar-legend {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  font-size: 0.82rem;
+  color: var(--color-muted);
+}
+
+.calendar-legend span::before {
+  content: "";
+  display: inline-block;
+  width: 0.8rem;
+  height: 0.8rem;
+  border-radius: 3px;
+  margin-right: 0.35rem;
+  vertical-align: -0.1rem;
+}
+
+.calendar-legend .l-hold::before { background: var(--color-hold); border: 1px dashed var(--color-hold-border); }
+.calendar-legend .l-booked::before { background: var(--color-booked); border-left: 3px solid var(--color-booked-border); }
+.calendar-legend .l-done::before { background: var(--color-done); }
+
+/* ---------- To do: little reward when something gets checked ---------- */
+@keyframes todo-pop {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.35); }
+  100% { transform: scale(1); }
+}
+
+.todo-check.pop {
+  animation: todo-pop 0.35s ease-out;
+}
+
+.todo-check.done {
+  background: var(--color-booked-border) !important;
+  border-color: var(--color-booked-border) !important;
+}
+
+.done-count {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--color-booked-border);
+  white-space: nowrap;
+}
+
+/* ---------- "Just one thing" focus screen ---------- */
+.focus-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5rem;
+  padding: 2rem 1.25rem;
+  text-align: center;
+}
+
+.focus-item {
+  font-size: clamp(1.5rem, 5vw, 2.2rem);
+  font-weight: 600;
+  max-width: 640px;
+  overflow-wrap: anywhere;
 }

@@ -99,6 +99,11 @@ export default async function AdminCalendarPage({
             <a href="/admin/events">List of all events (incl. past)</a>
             <a href="/admin/events/import-times">Import from spreadsheet</a>
           </p>
+          <p className="calendar-legend" style={{ margin: "0.5rem 0 0" }}>
+            <span className="l-hold">Hold</span>
+            <span className="l-booked">Booked</span>
+            <span className="l-done">Done</span>
+          </p>
         </div>
         <QuickAddEvent defaultDate={anchor} autoOpen={searchParams.quickadd === "1"} />
       </div>
