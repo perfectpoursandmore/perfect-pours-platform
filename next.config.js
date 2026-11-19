@@ -1,6 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // Receipt photos are shrunk on the phone first, but leave room in case
+  // that isn't possible (e.g. an older browser).
+  experimental: { serverActions: { bodySizeLimit: "12mb" } },
   // The old Price List and Catalog pages were merged into one Services page.
   // Keep their links (bookmarks, emails) working.
   async redirects() {
