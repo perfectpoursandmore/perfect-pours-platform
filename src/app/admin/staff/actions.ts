@@ -1,11 +1,12 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/auth/roles";
-import { isEmailConfigured, sendTemplatedEmail } from "@/lib/email";
+import { isEmailConfigured, sendEmail, sendTemplatedEmail } from "@/lib/email";
 import { formatDate } from "@/lib/labels";
 
 const ALL_ROLES = ["bartender", "server", "barback"];
@@ -48,15 +49,20 @@ export async function addStaffMember(formData: FormData) {
 }
 
 /**
- * Sends a real login invite to a staff member already in the roster — an
- * actual email + set-a-password flow, the same thing the one-time
- * invite-user.mjs script does, but from right here in the admin instead of
- * needing Node or database credentials. Requires an email on file for them
- * (from staff_details). Links the new login back to this staff row so the
- * staff calendar can bold "(you)" on their own assignments once they sign in.
- * Also used as "Resend invite" for someone whose link expired before they
- * joined: inviting an email that hasn't been confirmed yet just sends a
- * fresh link to the same login.
+ * Sends a real login invite to a staff member already in the roster, and is
+ * also the "Resend invite" button for someone who hasn't joined yet.
+ *
+ * Why we don't use Supabase's own invite email: its link signs the person in
+ * the moment the link is opened, and that link only works once. Outlook,
+ * Gmail and iMessage "safety check" links by opening them before the person
+ * ever taps, which used up the link, so staff saw "That link is invalid or
+ * has expired" even when they tapped it right away.
+ *
+ * Instead we ask Supabase for the one-time code behind the link and send our
+ * own email pointing to /auth/accept, a page with a "Set up my account"
+ * button. Link checkers only open pages, they never press buttons, so the
+ * code is used only when the real person taps. The same link is also shown
+ * on the Staff page so Faith can text it if the email doesn't arrive.
  */
 export async function inviteStaffLogin(formData: FormData) {
   await requireAdmin();
@@ -69,27 +75,83 @@ export async function inviteStaffLogin(formData: FormData) {
     redirect("/admin/staff?error=Add an email for this person before inviting them to log in.");
   }
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
+  const appUrl = (process.env.NEXT_PUBLIC_APP_URL || appUrlFromRequest()).replace(/\/$/, "");
+  const userData = { role: "staff", full_name: `${firstName} ${lastName}`.trim() };
 
   const admin = createAdminClient();
-  const { data, error } = await admin.auth.admin.inviteUserByEmail(email, {
-    data: { role: "staff", full_name: `${firstName} ${lastName}`.trim() },
-    redirectTo: `${appUrl}/auth/confirm`,
+  // "invite" works for someone new or invited-but-not-joined. If Supabase
+  // won't make another invite for this email (e.g. the login already
+  // exists), a one-time sign-in link does the same job: tapping it confirms
+  // their email and takes them to set a password.
+  let linkType: "invite" | "magiclink" = "invite";
+  let result = await admin.auth.admin.generateLink({
+    type: "invite",
+    email,
+    options: { data: userData, redirectTo: `${appUrl}/auth/set-password` },
   });
+  if (result.error) {
+    linkType = "magiclink";
+    result = await admin.auth.admin.generateLink({
+      type: "magiclink",
+      email,
+      options: { redirectTo: `${appUrl}/auth/set-password` },
+    });
+  }
 
-  if (error || !data?.user) {
+  const { data, error } = result;
+  const tokenHash = data?.properties?.hashed_token;
+  if (error || !data?.user || !tokenHash) {
     redirect(
-      `/admin/staff?error=${encodeURIComponent(
-        error?.message ?? "Couldn't send that invite."
-      )}`
+      `/admin/staff?error=${encodeURIComponent(error?.message ?? "Couldn't create that invite.")}`
     );
   }
 
   const supabase = createClient();
   await supabase.from("staff").update({ user_id: data!.user.id }).eq("id", staffId);
 
+  const acceptLink = `${appUrl}/auth/accept?token_hash=${encodeURIComponent(tokenHash!)}&type=${linkType}`;
+
+  let sent = false;
+  if (isEmailConfigured()) {
+    try {
+      await sendEmail({
+        to: email,
+        subject: "Your Perfect Pours & More staff login",
+        html: inviteEmailHtml(firstName, acceptLink),
+      });
+      sent = true;
+    } catch {
+      sent = false;
+    }
+  }
+
   revalidatePath("/admin/staff");
-  redirect(`/admin/staff?notice=${encodeURIComponent(`Invite sent to ${email}.`)}`);
+  const notice = sent
+    ? `Invite sent to ${email}.`
+    : `The email didn't go out, so text ${firstName || "them"} this link instead.`;
+  redirect(
+    `/admin/staff?notice=${encodeURIComponent(notice)}&inviteLink=${encodeURIComponent(acceptLink)}`
+  );
+}
+
+function appUrlFromRequest(): string {
+  const h = headers();
+  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "";
+  const proto = h.get("x-forwarded-proto") ?? "https";
+  return host ? `${proto}://${host}` : "";
+}
+
+function inviteEmailHtml(firstName: string, link: string): string {
+  const hi = firstName ? `Hi ${escapeHtml(firstName)},` : "Hi,";
+  return `<p>${hi}</p>
+<p>Faith has set you up with a login for the Perfect Pours &amp; More staff app, where you can see your events and let her know when you're free.</p>
+<p><a href="${link}" style="display:inline-block;padding:12px 20px;background:#8a2346;color:#fff;border-radius:999px;text-decoration:none">Set up my account</a></p>
+<p>Tap the button, then tap <strong>Set up my account</strong> on the page that opens and choose a password.</p>
+<p>If the button doesn't work, copy this link into your browser:<br>${link}</p>`;
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
 /**
