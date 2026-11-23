@@ -3,13 +3,14 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { addStaffMember, toggleStaffActive, inviteStaffLogin } from "./actions";
 import { AvailabilitySection } from "./AvailabilitySection";
+import { CopyInviteLink } from "./CopyInviteLink";
 
 const ALL_ROLES = ["bartender", "server", "barback"];
 
 export default async function StaffDirectoryPage({
   searchParams,
 }: {
-  searchParams: { error?: string; notice?: string; date?: string };
+  searchParams: { error?: string; notice?: string; date?: string; inviteLink?: string };
 }) {
   const supabase = createClient();
 
@@ -18,7 +19,7 @@ export default async function StaffDirectoryPage({
     .select("id, first_name, last_name, roles, active, user_id, staff_details(email)")
     .order("first_name");
 
-  // Someone who was invited but never clicked their email link still has a
+  // Someone who was invited but never finished setting up still has a
   // login on file (user_id), but it's unconfirmed — so they get "Resend
   // invite" instead of "Can log in", e.g. when their link expired. Same if
   // their login was deleted in Supabase directly.
@@ -46,6 +47,7 @@ export default async function StaffDirectoryPage({
 
       {searchParams.error && <p style={{ color: "var(--color-danger)" }}>{searchParams.error}</p>}
       {searchParams.notice && <p style={{ color: "var(--color-accent)" }}>{searchParams.notice}</p>}
+      {searchParams.inviteLink && <CopyInviteLink link={searchParams.inviteLink} />}
 
 
       <div className="card" style={{ padding: 0 }}>
