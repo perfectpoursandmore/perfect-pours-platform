@@ -452,3 +452,68 @@ export async function getInvoiceStatus(
     paid: invoice.Balance <= 0,
   };
 }
+
+// ---------------------------------------------------------------------
+// Expenses. QuickBooks already pulls in Faith's bank and card spending and
+// categorizes it, so the app reads those instead of asking her to photograph
+// receipts. Only expenses she has accepted in QuickBooks' bank feed exist
+// as Purchases; anything still "For review" there isn't visible yet.
+// ---------------------------------------------------------------------
+
+export type QboExpense = {
+  qboId: string;
+  date: string; // YYYY-MM-DD
+  payee: string | null;
+  total: number;
+  isRefund: boolean;
+  category: string | null;
+  note: string | null;
+};
+
+type QboPurchase = {
+  Id: string;
+  TxnDate: string;
+  TotalAmt?: number;
+  Credit?: boolean;
+  PrivateNote?: string;
+  EntityRef?: { name?: string };
+  Line?: { Description?: string; AccountBasedExpenseLineDetail?: { AccountRef?: { name?: string } } }[];
+};
+
+/**
+ * Expenses (QuickBooks "Purchases": card, debit, check and cash spending)
+ * changed since `changedSince`, or dated on/after `fromDate` on the first
+ * run. A card refund comes through as a Purchase marked Credit.
+ */
+export async function listQboExpenses(
+  conn: QboConnection,
+  opts: { fromDate?: string; changedSince?: string }
+): Promise<QboExpense[]> {
+  const where = opts.changedSince
+    ? `MetaData.LastUpdatedTime >= '${qboQueryEscape(opts.changedSince)}'`
+    : `TxnDate >= '${qboQueryEscape(opts.fromDate ?? "2000-01-01")}'`;
+  const out: QboExpense[] = [];
+  const pageSize = 500;
+  for (let start = 1; start < 20_000; start += pageSize) {
+    const query = `select * from Purchase where ${where} startposition ${start} maxresults ${pageSize}`;
+    const result = await qboFetch(conn, `/query?query=${encodeURIComponent(query)}`);
+    const rows = ((result.QueryResponse as { Purchase?: QboPurchase[] } | undefined)?.Purchase ?? []) as QboPurchase[];
+    for (const p of rows) {
+      const categories = Array.from(
+        new Set((p.Line ?? []).map((l) => l.AccountBasedExpenseLineDetail?.AccountRef?.name).filter((n): n is string => Boolean(n)))
+      );
+      const firstDescription = (p.Line ?? []).map((l) => l.Description).find(Boolean) ?? null;
+      out.push({
+        qboId: String(p.Id),
+        date: p.TxnDate,
+        payee: p.EntityRef?.name ?? null,
+        total: Math.abs(Number(p.TotalAmt ?? 0)),
+        isRefund: Boolean(p.Credit),
+        category: categories.join(", ") || null,
+        note: p.PrivateNote || firstDescription,
+      });
+    }
+    if (rows.length < pageSize) break;
+  }
+  return out;
+}
