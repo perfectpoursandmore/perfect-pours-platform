@@ -63,6 +63,24 @@ export default async function EventStaffPage({ params }: { params: { id: string 
     .eq("event_id", params.id)
     .order("created_at");
 
+  // Day-level answers (Staff > Availability, migration 0014) for this
+  // event's date, so the Person picker below can show who already said
+  // they're free that day -- the whole point of asking once per day.
+  const { data: event } = await supabase.from("events").select("event_date").eq("id", params.id).single();
+  const { data: dayAnswers } = event?.event_date
+    ? await supabase.from("staff_date_availability").select("staff_id, status").eq("date", event.event_date)
+    : { data: [] };
+  const dayStatusByStaff = new Map((dayAnswers ?? []).map((d) => [d.staff_id, d.status as string]));
+  const DAY_ORDER: Record<string, number> = { available: 0, pending: 1 };
+  const staffForPicker = [...(activeStaff ?? [])].sort(
+    (a, b) => (DAY_ORDER[dayStatusByStaff.get(a.id) ?? ""] ?? 2) - (DAY_ORDER[dayStatusByStaff.get(b.id) ?? ""] ?? 2)
+  );
+  const DAY_SUFFIX: Record<string, string> = {
+    available: " — free that day ✓",
+    pending: " — hasn't answered for that day",
+    unavailable: " — NOT free that day",
+  };
+
   return (
     <div style={{ display: "grid", gap: "1.5rem" }}>
       <div className="card">
@@ -144,9 +162,9 @@ export default async function EventStaffPage({ params }: { params: { id: string 
               style={{ width: "100%", padding: "0.55rem 0.7rem", borderRadius: 8, border: "1px solid var(--color-border)" }}
             >
               <option value="">— Open position (unfilled) —</option>
-              {(activeStaff ?? []).map((s) => (
+              {staffForPicker.map((s) => (
                 <option key={s.id} value={s.id}>
-                  {s.first_name} {s.last_name}
+                  {`${s.first_name} ${s.last_name}${DAY_SUFFIX[dayStatusByStaff.get(s.id) ?? ""] ?? ""}`}
                 </option>
               ))}
             </select>
