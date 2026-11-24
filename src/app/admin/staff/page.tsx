@@ -19,15 +19,24 @@ export default async function StaffDirectoryPage({
     .select("id, first_name, last_name, roles, active, user_id, staff_details(email)")
     .order("first_name");
 
-  // Someone who was invited but never finished setting up still has a
-  // login on file (user_id), but it's unconfirmed — so they get "Resend
-  // invite" instead of "Can log in", e.g. when their link expired. Same if
-  // their login was deleted in Supabase directly.
+  // Who has actually finished joining (chosen a password)? Supabase's own
+  // "email confirmed" flag isn't enough: Outlook's link checker opening an
+  // old-style invite link confirmed the email without the person ever
+  // setting a password, so she showed "Can log in" but couldn't. We count
+  // someone as joined if the set-password step marked them (password_set),
+  // or, for people who joined before that mark existed, if they've signed
+  // in again well after their email was first confirmed.
   const joinedUserIds = new Set<string>();
   if (staff?.some((s) => s.user_id)) {
     const { data } = await createAdminClient().auth.admin.listUsers({ perPage: 1000 });
     for (const u of data?.users ?? []) {
-      if (u.email_confirmed_at) joinedUserIds.add(u.id);
+      if (u.user_metadata?.password_set) {
+        joinedUserIds.add(u.id);
+        continue;
+      }
+      const confirmed = u.email_confirmed_at ? Date.parse(u.email_confirmed_at) : 0;
+      const lastSignIn = u.last_sign_in_at ? Date.parse(u.last_sign_in_at) : 0;
+      if (confirmed && lastSignIn - confirmed > 10 * 60 * 1000) joinedUserIds.add(u.id);
     }
   }
 
@@ -74,24 +83,23 @@ export default async function StaffDirectoryPage({
                     <td style={{ padding: "0.75rem 1rem" }}>{s.roles?.join(", ") || "—"}</td>
                     <td style={{ padding: "0.75rem 1rem" }}>{s.active ? "Active" : "Inactive"}</td>
                     <td style={{ padding: "0.75rem 1rem" }}>
-                      {s.user_id && joinedUserIds.has(s.user_id) ? (
-                        <span style={{ color: "var(--color-text)" }}>✓ Can log in</span>
-                      ) : email ? (
+                      {email ? (
                         <form action={inviteStaffLogin}>
                           <input type="hidden" name="staffId" value={s.id} />
                           <input type="hidden" name="firstName" value={s.first_name} />
                           <input type="hidden" name="lastName" value={s.last_name} />
                           <input type="hidden" name="email" value={email} />
                           {s.user_id && (
-                            <span style={{ color: "var(--color-muted)", fontSize: "0.85rem", display: "block" }}>
-                              Invited, hasn't joined yet
+                            <span style={{ color: joinedUserIds.has(s.user_id) ? "var(--color-text)" : "var(--color-muted)", fontSize: "0.85rem", display: "block" }}>
+                              {joinedUserIds.has(s.user_id) ? "✓ Can log in" : "Invited, hasn't finished setting up"}
                             </span>
                           )}
+                          {/* Always offered: it's also how someone who forgot their password gets back in. */}
                           <button
                             type="submit"
-                            style={{ background: "none", border: "none", color: "var(--color-accent)", cursor: "pointer", padding: 0 }}
+                            style={{ background: "none", border: "none", color: "var(--color-accent)", cursor: "pointer", padding: 0, fontSize: s.user_id && joinedUserIds.has(s.user_id) ? "0.85rem" : undefined }}
                           >
-                            {s.user_id ? "Resend invite" : "Invite to log in"}
+                            {!s.user_id ? "Invite to log in" : joinedUserIds.has(s.user_id) ? "Send new login link" : "Resend invite"}
                           </button>
                         </form>
                       ) : (

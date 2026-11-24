@@ -25,7 +25,9 @@ export async function updatePassword(formData: FormData) {
     redirect(`/login?error=${encodeURIComponent("That link expired — ask for a new invite.")}`);
   }
 
-  const { error } = await supabase.auth.updateUser({ password });
+  // password_set lets the Staff page tell "really joined" apart from "email
+  // confirmed by a link checker but never finished".
+  const { error } = await supabase.auth.updateUser({ password, data: { password_set: true } });
 
   if (error) {
     redirect(`/auth/set-password?error=${encodeURIComponent(error.message)}`);
